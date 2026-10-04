@@ -2,7 +2,27 @@
   "name": "zekumo-sdk",
   "version": "0.1.0",
   "description": "Official JavaScript/TypeScript SDK for Zekumo, the mini-game BaaS platform",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
+  "keywords": [
+    "game-backend",
+    "baas",
+    "game-development",
+    "realtime",
+    "leaderboard",
+    "cloud-save"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zekumo/Zekumo.git",
+    "directory": "sdk"
+  },
+  "homepage": "https://github.com/Zekumo/Zekumo/tree/main/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Zekumo/Zekumo/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -20,7 +40,8 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs"
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "typescript": "^5.5.0"
