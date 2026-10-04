@@ -1,0 +1,117 @@
+LEDGER_VERSION=1
+TARGET=MiniCloud Phase 3 admin console (currency / mail / retention+funnel / bans)
+CHANGED_FIELD=web/admin console pages and registration; README API docs. No Go, schema, or client API changes.
+PRISTINE: application/gzip=/home/mnsjtxy/minicloud/artifacts/prd-p3-20260920/PRISTINE_FILE
+MODIFIED_FILE: application/gzip=/home/mnsjtxy/minicloud/artifacts/prd-p3-20260920/MODIFIED_FILE
+DIFF_FILE: text/x-diff=/home/mnsjtxy/minicloud/artifacts/prd-p3-20260920/DIFF_FILE
+VERIFICATION: text/plain=/home/mnsjtxy/minicloud/artifacts/prd-p3-20260920/VERIFICATION.txt
+ROLLBACK: application/x-sh=/home/mnsjtxy/minicloud/artifacts/prd-p3-20260920/ROLLBACK.sh
+
+SCOPE=3 new files (web/admin/page-currency.js, page-mail.js, page-bans.js);
+      6 edited (web/admin/nav.js, index.html, charts.css, page-players.js,
+      page-overview.js, README.md). 655 added / 13 removed lines.
+BASELINE=artifacts/prd-p2-20260906/current-final (previous delivered state)
+
+TEST=JS_SYNTAX
+COMMAND=for f in web/admin/*.js; do node --check "$f" || exit 1; done
+INPUT=cwd:/home/mnsjtxy/minicloud
+LITERAL_OUTPUT:
+JS_OK
+EXIT_STATUS=0
+
+TEST=GO_VET
+COMMAND=GOCACHE=/tmp/minicloud-gocache GOPROXY=https://goproxy.cn,direct go vet ./...
+INPUT=cwd:/home/mnsjtxy/minicloud
+LITERAL_OUTPUT:
+VET_OK
+EXIT_STATUS=0
+
+TEST=GO_TEST
+COMMAND=GOCACHE=/tmp/minicloud-gocache GOPROXY=https://goproxy.cn,direct go test ./...
+INPUT=cwd:/home/mnsjtxy/minicloud
+NOTE=config/httpx/logs/netsafe/ratelimit/updates pass; remaining packages have no test files.
+EXIT_STATUS=0
+
+TEST=GO_BUILD
+COMMAND=GOCACHE=/tmp/minicloud-gocache GOPROXY=https://goproxy.cn,direct go build -buildvcs=false -o /tmp/minicloud-server-p3 ./cmd/server
+INPUT=cwd:/home/mnsjtxy/minicloud
+NOTE=Compiles the embedded console through web/embed.go, so the new page files are covered.
+LITERAL_OUTPUT:
+BUILD_OK
+EXIT_STATUS=0
+
+TEST=ROUTE_CROSSCHECK
+COMMAND=grep -qF each admin endpoint called by the UI in internal/server/routes.go
+INPUT=14 endpoints used by page-currency.js, page-mail.js, page-bans.js, page-overview.js, page-players.js
+LITERAL_OUTPUT:
+OK   GET /admin/api/games/{id}/currencies
+OK   POST /admin/api/games/{id}/currencies
+OK   PUT /admin/api/currencies/{cid}
+OK   DELETE /admin/api/currencies/{cid}
+OK   POST /admin/api/games/{id}/currency/{cid}/grant
+OK   GET /admin/api/players/{pid}/currency
+OK   GET /admin/api/players/{pid}/currency/{cid}/ledger
+OK   POST /admin/api/games/{id}/mail
+OK   GET /admin/api/games/{id}/mail
+OK   GET /admin/api/games/{id}/stats/retention
+OK   GET /admin/api/games/{id}/stats/funnel
+OK   POST /admin/api/players/{pid}/ban
+OK   POST /admin/api/players/{pid}/unban
+OK   GET /admin/api/games/{id}/bans
+EXIT_STATUS=0
+
+TEST=WIRING
+COMMAND=resolve every ROUTES render fn to a loaded file; check NAV_GAME keys exist in ROUTES; check script tags; detect duplicate top-level names
+LITERAL_OUTPUT:
+18/18 render functions resolve (renderCurrency, renderMail, renderBans included)
+14/14 NAV_GAME keys exist in ROUTES
+3/3 new script tags present in index.html
+no duplicate top-level function names
+no duplicate top-level const names
+EXIT_STATUS=0
+
+TEST=BEHAVIOR_RETENTION_FUNNEL
+COMMAND=node harness over retentionRate / latestRate / retentionCard / retentionChart / funnelCard
+INPUT=synthetic cohorts incl. NULL d7/d30
+LITERAL_OUTPUT:
+retentionRate null cohort -> null (not 0%)
+retentionRate unfinished dN -> null
+latest d1 -> 2026-09-18 40%; latest d7 -> 2026-09-01 25%; latest d30 -> null
+d30 tile renders a dash
+6 pending bars for 3 cohorts (1+2+3), drawn as gaps not zeros
+funnel widths 100% / 100% / 25%; step-over-step drop 25%
+empty states fire for no rows and for a zero top step
+EXIT_STATUS=0
+
+TEST=BEHAVIOR_MAIL_BANS_CURRENCY
+COMMAND=node harnesses over mailRewards/mailRow, banState/banRow, currencyRow/newIdempotencyKey
+LITERAL_OUTPUT:
+mail rewards null-safe -> []
+directed claim rate 25% correct; broadcast shows absolute count, no NaN divide-by-zero
+expired mail badge correct
+ban states: permanent=封禁中, future expiry=封禁中, past expiry=已到期, lifted=已解禁
+unban button present only for active bans
+idempotency keys unique, <=128 chars (backend maxKeyLen)
+quote in operator-entered currency name escaped to &quot;, no inline-handler breakout
+CURRENCY_MAX=8 matches currency.MaxPerGame; MAIL_MAX_RECIPIENTS=1000 matches mailbox.maxRecipients
+expires_in sent in seconds (days*86400) matching time.Duration(req.ExpiresIn)*time.Second
+EXIT_STATUS=0
+
+TEST=ROLLBACK_REHEARSAL
+COMMAND=cp tree to /tmp/mc-rollback-test; artifacts/prd-p3-20260920/ROLLBACK.sh /tmp/mc-rollback-test; diff against pristine
+INPUT=throwaway copy of web/ and README.md (never the live tree)
+LITERAL_OUTPUT:
+removed OK: page-currency.js, page-mail.js, page-bans.js
+nav.js renderCurrency hits: 0 (expect 0)
+IDENTICAL web/admin/nav.js
+IDENTICAL web/admin/index.html
+IDENTICAL web/admin/charts.css
+IDENTICAL web/admin/page-players.js
+IDENTICAL web/admin/page-overview.js
+IDENTICAL README.md
+EXIT_STATUS=0
+
+NOT_TESTED=No live Postgres/Redis render. Response field names were matched by
+  reading Go handlers and repo struct JSON tags, not by executing a request.
+NOT_DONE=No server deployment. deploy/deploy.sh, docker-compose.prod.yml and
+  deploy/dist are untouched; this bundle only records a reversible source change.

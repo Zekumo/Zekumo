@@ -1,0 +1,104 @@
+# 生产部署。与 docker-compose.yml(本地开发)的区别:
+#   - 机密没有默认值,缺失即启动失败,不会静默用弱口令跑起来
+#   - MINICLOUD_ENV=production,配置不安全时拒绝启动
+#   - 只把服务端口绑在 127.0.0.1,由前面的反代终止 TLS
+#   - 数据库和 Redis 不对外暴露端口
+#   - 重启策略、健康检查、资源上限、日志轮转
+#
+#   cp .env.example .env && 填好密钥
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d
+#
+# TLS 由你现有的 Nginx / Caddy / CDN 负责,并把请求转发到 127.0.0.1:8080;
+# 反代必须覆写 X-Forwarded-For(TRUST_PROXY=true 才安全)。
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: minicloud
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: minicloud
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # 不映射端口:只有同一 compose 网络内的服务能连。
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minicloud"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: { memory: 1g }
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # appendonly:排行榜和限流计数在 Redis 里;丢了会从 Postgres 重建,
+    # 但持久化能避免重启后的一次全量重建。
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: { memory: 512m }
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  server:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
+    restart: unless-stopped
+    # 只绑回环地址:公网流量必须经过反代,不能直连应用端口。
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      MINICLOUD_ENV: production
+      DATABASE_URL: postgres://minicloud:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/minicloud
+      REDIS_ADDR: redis:6379
+      # 以下三项没有默认值:缺失时 compose 直接报错,而不是用弱口令启动。
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required, use: openssl rand -hex 32}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      BASE_URL: ${BASE_URL:?BASE_URL is required, e.g. https://api.example.com}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      LOCAL_DATA_DIR: /data
+      STATS_TZ: ${STATS_TZ:-Asia/Shanghai}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
+      LOG_HTTP_ALL: ${LOG_HTTP_ALL:-false}
+      TOKEN_TTL: ${TOKEN_TTL:-168h}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+    volumes:
+      - artifactdata:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits: { memory: 1g }
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "5" }
+
+volumes:
+  pgdata:
+  redisdata:
+  artifactdata:

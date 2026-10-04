@@ -1,0 +1,82 @@
+/* The signed-in operator: avatar, account menu and the security banner. */
+
+.account { position: relative; margin-left: 4px; }
+
+.account-btn {
+  position: relative; overflow: hidden; isolation: isolate;
+  display: flex; align-items: center; gap: 10px;
+  height: 44px; padding: 0 12px 0 4px;
+  border: none; border-radius: var(--shape-full);
+  background: transparent; color: var(--on-surface);
+  font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
+}
+.account-btn::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: currentColor; opacity: 0;
+  transition: opacity var(--dur-short) var(--ease-standard);
+}
+.account-btn:hover::before { opacity: .08; }
+
+.avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; flex: 0 0 36px;
+  border-radius: var(--shape-full);
+  color: #fff; font-size: 15px; font-weight: 500; line-height: 1;
+  user-select: none;
+}
+.avatar.lg { width: 48px; height: 48px; flex-basis: 48px; font-size: 20px; }
+
+/* ---------- account menu ---------- */
+.menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 30;
+  min-width: 280px;
+  background: var(--surface-container-high); color: var(--on-surface);
+  border-radius: var(--shape-md); box-shadow: var(--elev-3);
+  padding: 8px;
+  animation: menu-in var(--dur-short) var(--ease-emphasized);
+}
+@keyframes menu-in { from { opacity: 0; transform: translateY(-6px); } }
+
+.menu-head { display: flex; align-items: center; gap: 12px; padding: 12px; }
+.menu-name { font-size: 16px; font-weight: 500; }
+.menu-info { padding: 0 12px; }
+.menu-info .kv { padding: 6px 0; font-size: 13px; }
+.menu-sep { height: 1px; background: var(--outline-variant); margin: 8px 4px; }
+
+.menu-item {
+  position: relative; overflow: hidden; isolation: isolate;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; height: 44px; padding: 0 12px;
+  border: none; border-radius: var(--shape-sm);
+  background: transparent; color: var(--on-surface);
+  font: inherit; font-size: 14px; cursor: pointer; text-align: left;
+}
+.menu-item::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: currentColor; opacity: 0;
+  transition: opacity var(--dur-short) var(--ease-standard);
+}
+.menu-item:hover::before { opacity: .08; }
+.menu-item.danger { color: var(--error); }
+
+.menu-warn {
+  margin: 8px 4px 0; padding: 10px 12px;
+  background: var(--error-container); color: var(--on-error-container);
+  border-radius: var(--shape-sm); font-size: 12px; line-height: 18px;
+}
+
+/* ---------- security banner ---------- */
+.banner {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 16px 20px; margin-bottom: 16px;
+  background: var(--error-container); color: var(--on-error-container);
+  border-radius: var(--shape-md);
+}
+.banner-icon { font-size: 20px; line-height: 24px; }
+.banner ul { margin: 6px 0 6px 18px; font-size: 13px; line-height: 20px; }
+.banner .dim { color: inherit; opacity: .8; }
+
+@media (max-width: 760px) {
+  .account-name { display: none; }
+  .account-btn { padding: 0 4px; }
+}

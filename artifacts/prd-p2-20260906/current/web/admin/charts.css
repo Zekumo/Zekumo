@@ -1,0 +1,29 @@
+/* Chart affordances shared by the dashboard and a game's overview. */
+
+.chart-summary {
+  display: flex; gap: 24px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid var(--outline-variant);
+  color: var(--on-surface-variant); font-size: 13px;
+}
+.chart-summary b { color: var(--on-surface); font-weight: 500; }
+.chart-summary .up { color: #2e7d32; font-weight: 500; }
+.chart-summary .down { color: var(--error); font-weight: 500; }
+:root[data-theme="dark"] .chart-summary .up { color: #81c995; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .chart-summary .up { color: #81c995; }
+}
+
+/* inline sparkline inside a table cell */
+.spark { width: 96px; height: 24px; display: block; overflow: visible; }
+.spark polyline {
+  fill: none; stroke: var(--primary); stroke-width: 1.6;
+  stroke-linejoin: round; stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.spark circle { fill: var(--primary); }
+
+/* platform health: three columns of key/value rows */
+.health { display: grid; gap: 8px 32px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.health-col .kv:last-child { border-bottom: none; }
+.health b.bad { color: var(--error); }

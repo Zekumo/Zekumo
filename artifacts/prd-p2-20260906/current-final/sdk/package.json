@@ -1,0 +1,28 @@
+{
+  "name": "minicloud-sdk",
+  "version": "0.1.0",
+  "description": "Official JavaScript/TypeScript SDK for MiniCloud, the mini-game BaaS platform",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

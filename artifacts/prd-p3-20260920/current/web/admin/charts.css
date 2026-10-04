@@ -1,0 +1,83 @@
+/* Chart affordances shared by the dashboard and a game's overview. */
+
+.chart-summary {
+  display: flex; gap: 24px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid var(--outline-variant);
+  color: var(--on-surface-variant); font-size: 13px;
+}
+.chart-summary b { color: var(--on-surface); font-weight: 500; }
+.chart-summary .up { color: #2e7d32; font-weight: 500; }
+.chart-summary .down { color: var(--error); font-weight: 500; }
+:root[data-theme="dark"] .chart-summary .up { color: #81c995; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .chart-summary .up { color: #81c995; }
+}
+
+/* inline sparkline inside a table cell */
+.spark { width: 96px; height: 24px; display: block; overflow: visible; }
+.spark polyline {
+  fill: none; stroke: var(--primary); stroke-width: 1.6;
+  stroke-linejoin: round; stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.spark circle { fill: var(--primary); }
+
+/* platform health: three columns of key/value rows */
+.health { display: grid; gap: 8px 32px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.health-col .kv:last-child { border-bottom: none; }
+.health b.bad { color: var(--error); }
+
+/* ---------- retention: three grouped bars per cohort day ---------- */
+.retention-chart { display: flex; align-items: flex-end; gap: 3px; height: 160px; margin-top: 8px; }
+.retention-day {
+  flex: 1; height: 100%; display: flex; align-items: flex-end;
+  gap: 1px; justify-content: center;
+}
+.retention-bar {
+  flex: 1; min-height: 2px;
+  border-radius: var(--shape-xs) var(--shape-xs) 0 0;
+  transition: opacity var(--dur-short) var(--ease-standard);
+}
+.retention-day:hover .retention-bar { opacity: .65; }
+/* A cohort with no final answer yet is a gap, not a zero. */
+.retention-bar.pending { height: 2px; background: var(--outline-variant); }
+.retention-bar.d1  { background: var(--primary); }
+.retention-bar.d7  { background: color-mix(in srgb, var(--primary) 60%, transparent); }
+.retention-bar.d30 { background: color-mix(in srgb, var(--primary) 30%, transparent); }
+
+.legend { display: inline-flex; align-items: center; gap: 4px; margin-left: 12px; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.swatch.d1  { background: var(--primary); }
+.swatch.d7  { background: color-mix(in srgb, var(--primary) 60%, transparent); }
+.swatch.d30 { background: color-mix(in srgb, var(--primary) 30%, transparent); }
+
+/* ---------- registration funnel ---------- */
+.funnel { display: grid; gap: 16px; }
+.funnel-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.funnel-track {
+  height: 12px; border-radius: var(--shape-full);
+  background: var(--surface-container-highest); overflow: hidden;
+}
+.funnel-fill {
+  height: 100%; background: var(--primary);
+  border-radius: var(--shape-full);
+  transition: width var(--dur-medium) var(--ease-standard);
+}
+.funnel-drop { font-size: 12px; margin-top: 4px; }
+
+/* ledger amounts: credits and debits must be distinguishable at a glance */
+.amount.up { color: #2e7d32; }
+.amount.down { color: var(--error); }
+:root[data-theme="dark"] .amount.up { color: #81c995; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .amount.up { color: #81c995; }
+}
+
+/* reward amount inputs inside the mail dialog's key/value rows */
+.reward-input {
+  width: 120px; padding: 8px 12px;
+  border: 1px solid var(--outline); border-radius: var(--shape-xs);
+  background: transparent; color: var(--on-surface); font: inherit;
+}
+.reward-input:focus-visible { outline: 2px solid var(--primary); outline-offset: -1px; }

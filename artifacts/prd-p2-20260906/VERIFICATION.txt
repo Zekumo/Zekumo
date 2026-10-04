@@ -1,0 +1,493 @@
+LEDGER_VERSION=1
+TARGET=MiniCloud Phase 2 admin achievements and announcements
+CHANGED_FIELD=admin routes achievements/announcements; achievement deletion/unlock; announcement platform/channel/expiry
+MODIFIED_FILE: application/x-tar=/home/mnsjtxy/minicloud/artifacts/prd-p2-20260906/MODIFIED_FILE
+DIFF_FILE: text/x-diff=/home/mnsjtxy/minicloud/artifacts/prd-p2-20260906/DIFF_FILE
+VERIFICATION: text/plain=/home/mnsjtxy/minicloud/artifacts/prd-p2-20260906/VERIFICATION.txt
+ROLLBACK: application/x-sh=/home/mnsjtxy/minicloud/artifacts/prd-p2-20260906/ROLLBACK.sh
+
+TEST=INITIAL_JS_SYNTAX
+COMMAND=node --check web/admin/nav.js
+INPUT=original web/admin/nav.js
+STDOUT=""
+STDERR=""
+EXIT_STATUS=0
+ORIGINAL_NAV_SHA256=62de67aaf0fb2f952c2064b2649da817a4b8739800951c1a693d6b19f9f73859
+
+TEST=INITIAL_GO
+COMMAND=go test ./...
+INPUT=original workspace
+STDOUT:
+FAIL	./... [setup failed]
+FAIL
+STDERR:
+# ./...
+pattern ./...: open /home/mnsjtxy/.cache/go-build/d4/d415db6c886522e602ebac6ab881c813cf768cd9d59da8ce6731acc51c305f-d: read-only file system
+EXIT_STATUS=1
+
+TEST=INITIAL_SDK
+COMMAND=npm run build
+INPUT=original sdk
+OUTPUT:
+npm notice run minicloud-sdk@0.1.0 build
+npm notice run tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs
+sh: line 1: tsc: command not found
+EXIT_STATUS=127
+
+TEST=BASELINE_GO
+COMMAND=go test ./...
+INPUT=cwd:/home/mnsjtxy/minicloud
+STDOUT:
+FAIL	minicloud/cmd/server [setup failed]
+FAIL	minicloud/cmd/smoketest [setup failed]
+FAIL	minicloud/internal/achievements [setup failed]
+FAIL	minicloud/internal/admin [setup failed]
+FAIL	minicloud/internal/announcements [setup failed]
+FAIL	minicloud/internal/auth [setup failed]
+FAIL	minicloud/internal/bans [setup failed]
+FAIL	minicloud/internal/chat [setup failed]
+FAIL	minicloud/internal/currency [setup failed]
+FAIL	minicloud/internal/dialogue [setup failed]
+FAIL	minicloud/internal/exports [setup failed]
+FAIL	minicloud/internal/friends [setup failed]
+FAIL	minicloud/internal/funcs [setup failed]
+FAIL	minicloud/internal/hooks [setup failed]
+FAIL	minicloud/internal/kv [setup failed]
+FAIL	minicloud/internal/leaderboard [setup failed]
+FAIL	minicloud/internal/logs [setup failed]
+FAIL	minicloud/internal/mailbox [setup failed]
+FAIL	minicloud/internal/oauth [setup failed]
+FAIL	minicloud/internal/player [setup failed]
+FAIL	minicloud/internal/ratelimit [setup failed]
+FAIL	minicloud/internal/realtime [setup failed]
+FAIL	minicloud/internal/repo [setup failed]
+FAIL	minicloud/internal/server [setup failed]
+FAIL	minicloud/internal/sso [setup failed]
+FAIL	minicloud/internal/stats [setup failed]
+FAIL	minicloud/internal/storage [setup failed]
+FAIL	minicloud/internal/store [setup failed]
+FAIL	minicloud/internal/updates [setup failed]
+ok  	minicloud/internal/config	0.003s
+ok  	minicloud/internal/httpx	0.003s
+ok  	minicloud/internal/netsafe	0.003s
+?   	minicloud/internal/safego	[no test files]
+?   	minicloud/web	[no test files]
+FAIL
+
+STDERR:
+go: downloading github.com/redis/go-redis/v9 v9.21.0
+go: downloading github.com/Masterminds/semver/v3 v3.5.0
+go: downloading github.com/golang-jwt/jwt/v5 v5.3.1
+go: downloading golang.org/x/crypto v0.54.0
+go: downloading github.com/dop251/goja v0.0.0-20260723142020-b4aef50fa347
+go: downloading github.com/gorilla/websocket v1.5.3
+go: downloading golang.org/x/net v0.56.0
+go: downloading golang.org/x/text v0.40.0
+# minicloud/cmd/server
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/cmd/server
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/cmd/server
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/cmd/server
+internal/realtime/client.go:8:2: github.com/gorilla/websocket@v1.5.3: Get "https://proxy.golang.org/github.com/gorilla/websocket/@v/v1.5.3.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/cmd/server
+internal/bans/bans.go:12:2: github.com/redis/go-redis/v9@v9.21.0: Get "https://proxy.golang.org/github.com/redis/go-redis/v9/@v/v9.21.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/cmd/server
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/pkg/encrypt/server-side.go:27:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/cmd/server
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/api-put-object.go:36:2: golang.org/x/net@v0.56.0: Get "https://proxy.golang.org/golang.org/x/net/@v/v0.56.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/cmd/server
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/api.go:49:2: golang.org/x/net@v0.56.0: Get "https://proxy.golang.org/golang.org/x/net/@v/v0.56.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/cmd/server
+internal/funcs/guard.go:9:2: github.com/dop251/goja@v0.0.0-20260723142020-b4aef50fa347: Get "https://proxy.golang.org/github.com/dop251/goja/@v/v0.0.0-20260723142020-b4aef50fa347.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/cmd/server
+internal/updates/domain.go:9:2: github.com/Masterminds/semver/v3@v3.5.0: Get "https://proxy.golang.org/github.com/%21masterminds/semver/v3/@v/v3.5.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/cmd/smoketest
+internal/realtime/client.go:8:2: github.com/gorilla/websocket@v1.5.3: Get "https://proxy.golang.org/github.com/gorilla/websocket/@v/v1.5.3.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/achievements
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/achievements
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/achievements
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/admin
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/admin
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/admin
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/admin
+internal/realtime/client.go:8:2: github.com/gorilla/websocket@v1.5.3: Get "https://proxy.golang.org/github.com/gorilla/websocket/@v/v1.5.3.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/announcements
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/auth
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/auth
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/auth
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/bans
+internal/bans/bans.go:12:2: github.com/redis/go-redis/v9@v9.21.0: Get "https://proxy.golang.org/github.com/redis/go-redis/v9/@v/v9.21.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/bans
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/bans
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/bans
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/chat
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/chat
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/chat
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/currency
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/currency
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/currency
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/dialogue
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/dialogue
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/dialogue
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/exports
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/exports
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/pkg/encrypt/server-side.go:27:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/exports
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/api-put-object.go:36:2: golang.org/x/net@v0.56.0: Get "https://proxy.golang.org/golang.org/x/net/@v/v0.56.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/exports
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/api.go:49:2: golang.org/x/net@v0.56.0: Get "https://proxy.golang.org/golang.org/x/net/@v/v0.56.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/friends
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/friends
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/friends
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/funcs
+internal/funcs/guard.go:9:2: github.com/dop251/goja@v0.0.0-20260723142020-b4aef50fa347: Get "https://proxy.golang.org/github.com/dop251/goja/@v/v0.0.0-20260723142020-b4aef50fa347.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/funcs
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/funcs
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/funcs
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/funcs
+internal/bans/bans.go:12:2: github.com/redis/go-redis/v9@v9.21.0: Get "https://proxy.golang.org/github.com/redis/go-redis/v9/@v/v9.21.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/hooks
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/kv
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/kv
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/kv
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/leaderboard
+internal/bans/bans.go:12:2: github.com/redis/go-redis/v9@v9.21.0: Get "https://proxy.golang.org/github.com/redis/go-redis/v9/@v/v9.21.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/leaderboard
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/leaderboard
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/leaderboard
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/logs
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/logs
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/logs
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/mailbox
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/mailbox
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/mailbox
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/oauth
+internal/bans/bans.go:12:2: github.com/redis/go-redis/v9@v9.21.0: Get "https://proxy.golang.org/github.com/redis/go-redis/v9/@v/v9.21.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/oauth
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/oauth
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/oauth
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/player
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/player
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/player
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/ratelimit
+internal/bans/bans.go:12:2: github.com/redis/go-redis/v9@v9.21.0: Get "https://proxy.golang.org/github.com/redis/go-redis/v9/@v/v9.21.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/realtime
+internal/realtime/client.go:8:2: github.com/gorilla/websocket@v1.5.3: Get "https://proxy.golang.org/github.com/gorilla/websocket/@v/v1.5.3.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/realtime
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/realtime
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/realtime
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/repo
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/server
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/server
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/server
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/server
+internal/realtime/client.go:8:2: github.com/gorilla/websocket@v1.5.3: Get "https://proxy.golang.org/github.com/gorilla/websocket/@v/v1.5.3.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/server
+internal/bans/bans.go:12:2: github.com/redis/go-redis/v9@v9.21.0: Get "https://proxy.golang.org/github.com/redis/go-redis/v9/@v/v9.21.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/server
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/pkg/encrypt/server-side.go:27:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/server
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/api-put-object.go:36:2: golang.org/x/net@v0.56.0: Get "https://proxy.golang.org/golang.org/x/net/@v/v0.56.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/server
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/api.go:49:2: golang.org/x/net@v0.56.0: Get "https://proxy.golang.org/golang.org/x/net/@v/v0.56.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/server
+internal/funcs/guard.go:9:2: github.com/dop251/goja@v0.0.0-20260723142020-b4aef50fa347: Get "https://proxy.golang.org/github.com/dop251/goja/@v/v0.0.0-20260723142020-b4aef50fa347.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/server
+internal/updates/domain.go:9:2: github.com/Masterminds/semver/v3@v3.5.0: Get "https://proxy.golang.org/github.com/%21masterminds/semver/v3/@v/v3.5.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/sso
+internal/bans/bans.go:12:2: github.com/redis/go-redis/v9@v9.21.0: Get "https://proxy.golang.org/github.com/redis/go-redis/v9/@v/v9.21.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/sso
+internal/auth/provider.go:9:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/sso
+internal/auth/token.go:7:2: github.com/golang-jwt/jwt/v5@v5.3.1: Get "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@v/v5.3.1.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/sso
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/stats
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/stats
+internal/bans/bans.go:12:2: github.com/redis/go-redis/v9@v9.21.0: Get "https://proxy.golang.org/github.com/redis/go-redis/v9/@v/v9.21.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/storage
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/pkg/encrypt/server-side.go:27:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/storage
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/api-put-object.go:36:2: golang.org/x/net@v0.56.0: Get "https://proxy.golang.org/golang.org/x/net/@v/v0.56.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/storage
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/api.go:49:2: golang.org/x/net@v0.56.0: Get "https://proxy.golang.org/golang.org/x/net/@v/v0.56.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/store
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/store
+internal/bans/bans.go:12:2: github.com/redis/go-redis/v9@v9.21.0: Get "https://proxy.golang.org/github.com/redis/go-redis/v9/@v/v9.21.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/updates
+internal/updates/domain.go:9:2: github.com/Masterminds/semver/v3@v3.5.0: Get "https://proxy.golang.org/github.com/%21masterminds/semver/v3/@v/v3.5.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/updates
+../go/pkg/mod/github.com/jackc/pgx/v5@v5.10.0/pgconn/auth_scram.go:33:2: golang.org/x/text@v0.40.0: Get "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/updates
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/pkg/encrypt/server-side.go:27:2: golang.org/x/crypto@v0.54.0: Get "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/updates
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/api-put-object.go:36:2: golang.org/x/net@v0.56.0: Get "https://proxy.golang.org/golang.org/x/net/@v/v0.56.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+# minicloud/internal/updates
+../go/pkg/mod/github.com/minio/minio-go/v7@v7.2.1/api.go:49:2: golang.org/x/net@v0.56.0: Get "https://proxy.golang.org/golang.org/x/net/@v/v0.56.0.zip": dial tcp 142.250.69.177:443: i/o timeout
+
+EXIT_STATUS=1
+
+TEST=FINAL_JS_SYNTAX
+COMMAND=for f in web/admin/*.js; do node --check "$f" || exit; done
+INPUT=cwd:/home/mnsjtxy/minicloud
+LITERAL_OUTPUT:
+
+EXIT_STATUS=0
+
+TEST=FINAL_SDK_TYPES
+COMMAND=/home/mnsjtxy/frontend/node_modules/.bin/tsc -p tsconfig.json --noEmit
+INPUT=cwd:/home/mnsjtxy/minicloud/sdk
+LITERAL_OUTPUT:
+
+EXIT_STATUS=0
+
+TEST=FINAL_SDK_BUILD
+COMMAND=PATH=/home/mnsjtxy/frontend/node_modules/.bin:$PATH npm run build
+INPUT=cwd:/home/mnsjtxy/minicloud/sdk
+LITERAL_OUTPUT:
+npm notice run minicloud-sdk@0.1.0 build
+npm notice run tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs
+
+EXIT_STATUS=0
+
+TEST=FINAL_GO_TEST
+COMMAND=GOCACHE=/tmp/minicloud-gocache GOPROXY=https://goproxy.cn,direct go test ./...
+INPUT=cwd:/home/mnsjtxy/minicloud
+LITERAL_OUTPUT:
+?   	minicloud/cmd/server	[no test files]
+?   	minicloud/cmd/smoketest	[no test files]
+?   	minicloud/internal/achievements	[no test files]
+?   	minicloud/internal/admin	[no test files]
+?   	minicloud/internal/announcements	[no test files]
+?   	minicloud/internal/auth	[no test files]
+?   	minicloud/internal/bans	[no test files]
+?   	minicloud/internal/chat	[no test files]
+ok  	minicloud/internal/config	(cached)
+?   	minicloud/internal/currency	[no test files]
+?   	minicloud/internal/dialogue	[no test files]
+?   	minicloud/internal/exports	[no test files]
+?   	minicloud/internal/friends	[no test files]
+?   	minicloud/internal/funcs	[no test files]
+?   	minicloud/internal/hooks	[no test files]
+ok  	minicloud/internal/httpx	(cached)
+?   	minicloud/internal/kv	[no test files]
+?   	minicloud/internal/leaderboard	[no test files]
+ok  	minicloud/internal/logs	(cached)
+?   	minicloud/internal/mailbox	[no test files]
+ok  	minicloud/internal/netsafe	(cached)
+?   	minicloud/internal/oauth	[no test files]
+?   	minicloud/internal/player	[no test files]
+ok  	minicloud/internal/ratelimit	(cached)
+?   	minicloud/internal/realtime	[no test files]
+?   	minicloud/internal/repo	[no test files]
+?   	minicloud/internal/safego	[no test files]
+?   	minicloud/internal/server	[no test files]
+?   	minicloud/internal/sso	[no test files]
+?   	minicloud/internal/stats	[no test files]
+?   	minicloud/internal/storage	[no test files]
+?   	minicloud/internal/store	[no test files]
+ok  	minicloud/internal/updates	(cached)
+?   	minicloud/web	[no test files]
+
+EXIT_STATUS=0
+
+TEST=FINAL_GO_VET
+COMMAND=GOCACHE=/tmp/minicloud-gocache GOPROXY=https://goproxy.cn,direct go vet ./...
+INPUT=cwd:/home/mnsjtxy/minicloud
+LITERAL_OUTPUT:
+
+EXIT_STATUS=0
+
+TEST=FINAL_GO_BUILD
+COMMAND=GOCACHE=/tmp/minicloud-gocache GOPROXY=https://goproxy.cn,direct go build -buildvcs=false -o /tmp/minicloud-server-final ./cmd/server
+INPUT=cwd:/home/mnsjtxy/minicloud
+LITERAL_OUTPUT:
+
+EXIT_STATUS=0
+
+TEST=ROLLBACK_COPY
+COMMAND=cp artifacts/prd-p2-20260906/MODIFIED_FILE /tmp/minicloud-prd-p2-20260906/MODIFIED_FILE.copy-final && artifacts/prd-p2-20260906/ROLLBACK.sh /tmp/minicloud-prd-p2-20260906/MODIFIED_FILE.copy-final && sha256sum /tmp/minicloud-prd-p2-20260906/MODIFIED_FILE.copy-final && tar -tf /tmp/minicloud-prd-p2-20260906/MODIFIED_FILE.copy-final | sed -n '1,8p'
+INPUT=target copy of MODIFIED_FILE; archive listing first 8 entries
+LITERAL_OUTPUT:
+db8912d3fc205676178968541067a9f4cb41cde44c83b3d34a10a0cd0799eb92  /tmp/minicloud-prd-p2-20260906/MODIFIED_FILE.copy-final
+internal/
+internal/currency/
+internal/currency/currency.go
+internal/updates/
+internal/updates/handler.go
+internal/updates/domain.go
+internal/updates/domain_test.go
+internal/stats/
+EXIT_STATUS=0
+
+TEST=ARTIFACT_HASHES
+COMMAND=sha256sum artifacts/prd-p2-20260906/PRISTINE_FILE artifacts/prd-p2-20260906/MODIFIED_FILE artifacts/prd-p2-20260906/DIFF_FILE artifacts/prd-p2-20260906/ROLLBACK.sh && stat -c '%a %n' artifacts/prd-p2-20260906/ROLLBACK.sh
+INPUT=four delivery artifact paths
+LITERAL_OUTPUT:
+db8912d3fc205676178968541067a9f4cb41cde44c83b3d34a10a0cd0799eb92  artifacts/prd-p2-20260906/PRISTINE_FILE
+a83d1b14fc3d7fb78232177cc52efb10450fad408bd9368fcb673676c16fb846  artifacts/prd-p2-20260906/MODIFIED_FILE
+7529cb2235e2d47f46ecbdd53c9d76617f1982fbd0893da9af9571248c449bd8  artifacts/prd-p2-20260906/DIFF_FILE
+8b4c510c636d68389076c42d06bd7b40fe0164db66c7b8f635a891b85cc00fce  artifacts/prd-p2-20260906/ROLLBACK.sh
+755 artifacts/prd-p2-20260906/ROLLBACK.sh
+EXIT_STATUS=0
+
+TEST=FINAL2_JS_SYNTAX
+COMMAND=for f in web/admin/*.js; do node --check "$f" || exit; done
+INPUT=cwd:/home/mnsjtxy/minicloud
+LITERAL_OUTPUT:
+
+EXIT_STATUS=0
+
+TEST=FINAL2_SDK_TYPES
+COMMAND=/home/mnsjtxy/frontend/node_modules/.bin/tsc -p tsconfig.json --noEmit
+INPUT=cwd:/home/mnsjtxy/minicloud/sdk
+LITERAL_OUTPUT:
+
+EXIT_STATUS=0
+
+TEST=FINAL2_SDK_BUILD
+COMMAND=PATH=/home/mnsjtxy/frontend/node_modules/.bin:$PATH npm run build
+INPUT=cwd:/home/mnsjtxy/minicloud/sdk
+LITERAL_OUTPUT:
+npm notice run minicloud-sdk@0.1.0 build
+npm notice run tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs
+
+EXIT_STATUS=0
+
+TEST=FINAL2_GO_TEST
+COMMAND=GOCACHE=/tmp/minicloud-gocache GOPROXY=https://goproxy.cn,direct go test ./...
+INPUT=cwd:/home/mnsjtxy/minicloud
+LITERAL_OUTPUT:
+?   	minicloud/cmd/server	[no test files]
+?   	minicloud/cmd/smoketest	[no test files]
+?   	minicloud/internal/achievements	[no test files]
+?   	minicloud/internal/admin	[no test files]
+?   	minicloud/internal/announcements	[no test files]
+?   	minicloud/internal/auth	[no test files]
+?   	minicloud/internal/bans	[no test files]
+?   	minicloud/internal/chat	[no test files]
+ok  	minicloud/internal/config	(cached)
+?   	minicloud/internal/currency	[no test files]
+?   	minicloud/internal/dialogue	[no test files]
+?   	minicloud/internal/exports	[no test files]
+?   	minicloud/internal/friends	[no test files]
+?   	minicloud/internal/funcs	[no test files]
+?   	minicloud/internal/hooks	[no test files]
+ok  	minicloud/internal/httpx	(cached)
+?   	minicloud/internal/kv	[no test files]
+?   	minicloud/internal/leaderboard	[no test files]
+ok  	minicloud/internal/logs	(cached)
+?   	minicloud/internal/mailbox	[no test files]
+ok  	minicloud/internal/netsafe	(cached)
+?   	minicloud/internal/oauth	[no test files]
+?   	minicloud/internal/player	[no test files]
+ok  	minicloud/internal/ratelimit	(cached)
+?   	minicloud/internal/realtime	[no test files]
+?   	minicloud/internal/repo	[no test files]
+?   	minicloud/internal/safego	[no test files]
+?   	minicloud/internal/server	[no test files]
+?   	minicloud/internal/sso	[no test files]
+?   	minicloud/internal/stats	[no test files]
+?   	minicloud/internal/storage	[no test files]
+?   	minicloud/internal/store	[no test files]
+ok  	minicloud/internal/updates	(cached)
+?   	minicloud/web	[no test files]
+
+EXIT_STATUS=0
+
+TEST=FINAL2_GO_VET
+COMMAND=GOCACHE=/tmp/minicloud-gocache GOPROXY=https://goproxy.cn,direct go vet ./...
+INPUT=cwd:/home/mnsjtxy/minicloud
+LITERAL_OUTPUT:
+
+EXIT_STATUS=0
+
+TEST=FINAL2_GO_BUILD
+COMMAND=GOCACHE=/tmp/minicloud-gocache GOPROXY=https://goproxy.cn,direct go build -buildvcs=false -o /tmp/minicloud-server-final ./cmd/server
+INPUT=cwd:/home/mnsjtxy/minicloud
+LITERAL_OUTPUT:
+
+EXIT_STATUS=0
+
+TEST=FINAL_ARTIFACT_HASHES
+COMMAND=sha256sum artifacts/prd-p2-20260906/PRISTINE_FILE artifacts/prd-p2-20260906/MODIFIED_FILE artifacts/prd-p2-20260906/DIFF_FILE artifacts/prd-p2-20260906/ROLLBACK.sh
+INPUT=four delivery artifact paths after final source snapshot
+LITERAL_OUTPUT:
+db8912d3fc205676178968541067a9f4cb41cde44c83b3d34a10a0cd0799eb92  artifacts/prd-p2-20260906/PRISTINE_FILE
+6018a691d49e5c237d4a4b6b7b343d28ac08e5ca7b5ca8c632d267f663441bef  artifacts/prd-p2-20260906/MODIFIED_FILE
+d5a55542ec73037e09e28c9d06cfc07ac2725ae68532c6b643e1566706378a5e  artifacts/prd-p2-20260906/DIFF_FILE
+8b4c510c636d68389076c42d06bd7b40fe0164db66c7b8f635a891b85cc00fce  artifacts/prd-p2-20260906/ROLLBACK.sh
+EXIT_STATUS=0
+
+TEST=FINAL_ROLLBACK_COPY
+COMMAND=cp artifacts/prd-p2-20260906/MODIFIED_FILE /tmp/minicloud-prd-p2-20260906/MODIFIED_FILE.copy-final2 && artifacts/prd-p2-20260906/ROLLBACK.sh /tmp/minicloud-prd-p2-20260906/MODIFIED_FILE.copy-final2 && sha256sum /tmp/minicloud-prd-p2-20260906/MODIFIED_FILE.copy-final2 && tar -tf /tmp/minicloud-prd-p2-20260906/MODIFIED_FILE.copy-final2 | sed -n '1,8p'
+INPUT=target copy of final MODIFIED_FILE; archive listing first 8 entries
+LITERAL_OUTPUT:
+db8912d3fc205676178968541067a9f4cb41cde44c83b3d34a10a0cd0799eb92  /tmp/minicloud-prd-p2-20260906/MODIFIED_FILE.copy-final2
+internal/
+internal/currency/
+internal/currency/currency.go
+internal/updates/
+internal/updates/domain.go
+internal/updates/domain_test.go
+internal/stats/
+EXIT_STATUS=0

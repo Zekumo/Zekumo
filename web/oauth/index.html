@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>授权 · MiniCloud 通行证</title>
+<style>
+  :root { --bg:#0f1420; --panel:#1a2233; --line:#2a3550; --text:#e6ebf5; --dim:#8b96ad; --accent:#4f8cff; --danger:#e05b5b; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--text); font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+         display:flex; align-items:center; justify-content:center; min-height:100vh; padding:16px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:28px; width:100%; max-width:380px; }
+  h1 { font-size:17px; margin-bottom:4px; }
+  h1 span { color:var(--accent); }
+  p.sub { color:var(--dim); font-size:13px; margin-bottom:18px; }
+  input { background:#0d1220; border:1px solid var(--line); border-radius:6px; color:var(--text);
+          padding:10px 12px; font:inherit; width:100%; margin-bottom:10px; }
+  button { border:0; border-radius:6px; color:#fff; padding:10px; font:inherit; cursor:pointer; width:100%; }
+  button.approve { background:var(--accent); }
+  button.deny { background:transparent; border:1px solid var(--line); color:var(--dim); margin-top:8px; }
+  button:hover { filter:brightness(1.1); }
+  .toggle { text-align:center; margin-top:12px; font-size:13px; color:var(--dim); }
+  .toggle a { color:var(--accent); cursor:pointer; }
+  #error { color:var(--danger); font-size:13px; margin-bottom:10px; min-height:18px; }
+  #blocked { color:var(--danger); }
+  .scopebox { background:#0d1220; border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:14px; font-size:13px; }
+  .scopebox b { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1><span>MiniCloud</span> 通行证授权</h1>
+  <p class="sub" id="subtitle">正在加载…</p>
+
+  <div id="loginBox" style="display:none">
+    <div id="error"></div>
+    <input id="username" placeholder="用户名" autocomplete="username">
+    <input id="password" type="password" placeholder="密码" autocomplete="current-password">
+    <input id="nickname" placeholder="昵称(可选)" style="display:none">
+    <button class="approve" id="loginBtn" onclick="doLogin()">登录</button>
+    <div class="toggle" id="toggleLine">没有账号?<a onclick="setMode('register')">注册一个</a></div>
+  </div>
+
+  <div id="consentBox" style="display:none">
+    <div class="scopebox">
+      <b id="appName"></b> 请求访问你的通行证:
+      <div id="scopeDesc" style="margin-top:6px;color:var(--dim)"></div>
+    </div>
+    <div id="error2" style="color:var(--danger);font-size:13px;min-height:18px"></div>
+    <button class="approve" onclick="approve()">同意授权</button>
+    <button class="deny" onclick="deny()">拒绝</button>
+  </div>
+
+  <p id="blocked" style="display:none"></p>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const clientId = params.get('client_id') || '';
+const redirectUri = params.get('redirect_uri') || '';
+const state = params.get('state') || '';
+const scope = params.get('scope') || 'profile';
+const codeChallenge = params.get('code_challenge') || '';
+const codeChallengeMethod = params.get('code_challenge_method') || '';
+let accountToken = localStorage.getItem('mc_account_token') || '';
+let mode = 'login';
+
+const scopeNames = { profile: '读取你的用户名和昵称' };
+
+function block(text) {
+  document.getElementById('subtitle').textContent = '';
+  document.getElementById('loginBox').style.display = 'none';
+  document.getElementById('consentBox').style.display = 'none';
+  const el = document.getElementById('blocked');
+  el.style.display = ''; el.textContent = text;
+}
+function setMode(m) {
+  mode = m;
+  document.getElementById('nickname').style.display = m === 'register' ? '' : 'none';
+  document.getElementById('loginBtn').textContent = m === 'register' ? '注册' : '登录';
+  document.getElementById('toggleLine').innerHTML = m === 'register'
+    ? '已有账号?<a onclick="setMode(\'login\')">直接登录</a>'
+    : '没有账号?<a onclick="setMode(\'register\')">注册一个</a>';
+}
+
+async function init() {
+  if (!clientId || !redirectUri) return block('链接不完整:缺少 client_id 或 redirect_uri。');
+  if ((params.get('response_type') || 'code') !== 'code') return block('仅支持 response_type=code。');
+  try {
+    const res = await fetch(`/oauth/api/info?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}`);
+    const info = await res.json();
+    if (!res.ok) return block(info.error ? info.error.message : '加载失败');
+    if (!info.redirect_valid) return block('回跳地址未在该应用的白名单中,已阻止授权。');
+    document.getElementById('appName').textContent = info.client_name;
+    document.getElementById('scopeDesc').textContent =
+      scope.split(' ').map(s => scopeNames[s] || s).join('、');
+    if (accountToken) { showConsent(); } else { showLogin(info.client_name); }
+  } catch { block('无法连接服务器'); }
+}
+function showLogin(name) {
+  document.getElementById('subtitle').textContent = `登录通行证以继续授权「${name}」`;
+  document.getElementById('loginBox').style.display = '';
+  document.getElementById('consentBox').style.display = 'none';
+}
+function showConsent() {
+  document.getElementById('subtitle').textContent = '确认授权';
+  document.getElementById('loginBox').style.display = 'none';
+  document.getElementById('consentBox').style.display = '';
+}
+
+async function doLogin() {
+  const err = document.getElementById('error');
+  err.textContent = '';
+  try {
+    const body = {
+      username: document.getElementById('username').value.trim(),
+      password: document.getElementById('password').value,
+    };
+    if (mode === 'register') body.nickname = document.getElementById('nickname').value.trim();
+    const res = await fetch(mode === 'register' ? '/sso/api/register' : '/sso/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) { err.textContent = data.error ? data.error.message : '失败'; return; }
+    accountToken = data.token;
+    localStorage.setItem('mc_account_token', accountToken);
+    showConsent();
+  } catch { err.textContent = '网络错误,请重试'; }
+}
+
+async function approve() {
+  const err = document.getElementById('error2');
+  err.textContent = '';
+  try {
+    const res = await fetch('/oauth/api/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accountToken },
+      body: JSON.stringify({
+        client_id: clientId, redirect_uri: redirectUri, scope,
+        code_challenge: codeChallenge, code_challenge_method: codeChallengeMethod,
+      }),
+    });
+    const data = await res.json();
+    if (res.status === 401) { // token expired: back to login
+      accountToken = ''; localStorage.removeItem('mc_account_token');
+      init(); return;
+    }
+    if (!res.ok) { err.textContent = data.error ? data.error.message : '授权失败'; return; }
+    go({ code: data.code });
+  } catch { err.textContent = '网络错误,请重试'; }
+}
+function deny() { go({ error: 'access_denied' }); }
+function go(extra) {
+  const sep = redirectUri.includes('?') ? '&' : '?';
+  const q = new URLSearchParams(extra);
+  if (state) q.set('state', state);
+  location.href = redirectUri + sep + q.toString();
+}
+
+document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+init();
+</script>
+</body>
+</html>

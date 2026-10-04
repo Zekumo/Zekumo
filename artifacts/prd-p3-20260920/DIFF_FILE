@@ -1,0 +1,768 @@
+diff -ruN artifacts/prd-p3-20260920/pristine/README.md artifacts/prd-p3-20260920/current/README.md
+--- artifacts/prd-p3-20260920/pristine/README.md	2026-09-20 21:53:49.898991507 +0800
++++ artifacts/prd-p3-20260920/current/README.md	2026-09-20 21:55:06.878878677 +0800
+@@ -209,6 +209,21 @@
+ DELETE /admin/api/announcements/{aid}                   下架(软删除)
+ ```
+ 
++### 虚拟货币与游戏内邮件
++
++每个游戏最多定义 8 种货币。发放与消费都要带 `idempotency_key`:同一流水号
++重复提交不会重复记账(返回 `duplicate: true`);同一流水号配不同金额返回 409。
++余额不足时消费返回 402。邮件奖励在玩家领取时一次性原子发放。
++
++```
++GET  /v1/currency                       我的各货币余额
++GET  /v1/currency/{cid}/ledger?limit=&offset=   我的流水明细
++POST /v1/currency/{cid}/spend           {"amount","idempotency_key","note"?}
++GET  /v1/mailbox?unread_only=true       收件箱(含未读数)
++POST /v1/mailbox/{mid}/read             标记已读
++POST /v1/mailbox/{mid}/claim            领取附件奖励(一次性)
++```
++
+ ### 检查更新(无需令牌 —— 更新器在登录之前运行)
+ 
+ ```
+@@ -471,6 +486,31 @@
+ GET    /admin/api/games/{id}/dialogues           脚本列表
+ ```
+ 
++### 运营工具(货币 / 邮件 / 留存 / 封禁)
++
++封禁立即生效:黑名单写 Redis(TTL = 封禁时长),已签发的令牌随即失效,
++封禁期内登录返回 `403 player_banned`。封禁与解禁会触发 WebHook 事件
++`player.banned` / `player.unbanned`。留存按注册日分群,每小时计算一次;
++`d1`/`d7`/`d30` 只在分群满 2/8/31 天、结果已确定后才填值,未确定时为 `null`。
++
++```
++GET/POST /admin/api/games/{id}/currencies        货币种类 CRUD(每游戏最多 8 种)
++PUT/DELETE /admin/api/currencies/{cid}
++POST   /admin/api/games/{id}/currency/{cid}/grant  {"player_id","amount","idempotency_key","note"?}
++GET    /admin/api/players/{pid}/currency         任意玩家的余额
++GET    /admin/api/players/{pid}/currency/{cid}/ledger   任意玩家的流水
++POST   /admin/api/games/{id}/mail                {"title","body","recipients","rewards"?,"expires_in"?}
++                                                 recipients 为 "all" 或最多 1000 个 player_id
++GET    /admin/api/games/{id}/mail                邮件列表 + 已读/领取统计
++GET    /admin/api/games/{id}/stats/retention?days=30    D1/D7/D30 留存时序
++GET    /admin/api/games/{id}/stats/funnel?days=30       注册漏斗
++POST   /admin/api/players/{pid}/ban               {"reason","duration_secs"?} 0 或省略=永久
++POST   /admin/api/players/{pid}/unban             解封
++GET    /admin/api/games/{id}/bans                 封禁记录
++```
++
++控制台对应「虚拟货币」「邮件」「封禁」三个页面,游戏「概览」页展示留存与漏斗。
++
+ ### 版本发布(更新分发)
+ 
+ 版本生命周期:`draft →(publish)→ published →(revoke)→ revoked`,已发布也可直接下架。
+diff -ruN artifacts/prd-p3-20260920/pristine/web/admin/charts.css artifacts/prd-p3-20260920/current/web/admin/charts.css
+--- artifacts/prd-p3-20260920/pristine/web/admin/charts.css	2026-09-20 21:53:49.892076662 +0800
++++ artifacts/prd-p3-20260920/current/web/admin/charts.css	2026-09-20 21:55:06.864750973 +0800
+@@ -27,3 +27,57 @@
+ .health { display: grid; gap: 8px 32px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+ .health-col .kv:last-child { border-bottom: none; }
+ .health b.bad { color: var(--error); }
++
++/* ---------- retention: three grouped bars per cohort day ---------- */
++.retention-chart { display: flex; align-items: flex-end; gap: 3px; height: 160px; margin-top: 8px; }
++.retention-day {
++  flex: 1; height: 100%; display: flex; align-items: flex-end;
++  gap: 1px; justify-content: center;
++}
++.retention-bar {
++  flex: 1; min-height: 2px;
++  border-radius: var(--shape-xs) var(--shape-xs) 0 0;
++  transition: opacity var(--dur-short) var(--ease-standard);
++}
++.retention-day:hover .retention-bar { opacity: .65; }
++/* A cohort with no final answer yet is a gap, not a zero. */
++.retention-bar.pending { height: 2px; background: var(--outline-variant); }
++.retention-bar.d1  { background: var(--primary); }
++.retention-bar.d7  { background: color-mix(in srgb, var(--primary) 60%, transparent); }
++.retention-bar.d30 { background: color-mix(in srgb, var(--primary) 30%, transparent); }
++
++.legend { display: inline-flex; align-items: center; gap: 4px; margin-left: 12px; }
++.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
++.swatch.d1  { background: var(--primary); }
++.swatch.d7  { background: color-mix(in srgb, var(--primary) 60%, transparent); }
++.swatch.d30 { background: color-mix(in srgb, var(--primary) 30%, transparent); }
++
++/* ---------- registration funnel ---------- */
++.funnel { display: grid; gap: 16px; }
++.funnel-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
++.funnel-track {
++  height: 12px; border-radius: var(--shape-full);
++  background: var(--surface-container-highest); overflow: hidden;
++}
++.funnel-fill {
++  height: 100%; background: var(--primary);
++  border-radius: var(--shape-full);
++  transition: width var(--dur-medium) var(--ease-standard);
++}
++.funnel-drop { font-size: 12px; margin-top: 4px; }
++
++/* ledger amounts: credits and debits must be distinguishable at a glance */
++.amount.up { color: #2e7d32; }
++.amount.down { color: var(--error); }
++:root[data-theme="dark"] .amount.up { color: #81c995; }
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme="light"]) .amount.up { color: #81c995; }
++}
++
++/* reward amount inputs inside the mail dialog's key/value rows */
++.reward-input {
++  width: 120px; padding: 8px 12px;
++  border: 1px solid var(--outline); border-radius: var(--shape-xs);
++  background: transparent; color: var(--on-surface); font: inherit;
++}
++.reward-input:focus-visible { outline: 2px solid var(--primary); outline-offset: -1px; }
+diff -ruN artifacts/prd-p3-20260920/pristine/web/admin/index.html artifacts/prd-p3-20260920/current/web/admin/index.html
+--- artifacts/prd-p3-20260920/pristine/web/admin/index.html	2026-09-20 21:53:49.889567893 +0800
++++ artifacts/prd-p3-20260920/current/web/admin/index.html	2026-09-20 21:55:06.862362122 +0800
+@@ -76,6 +76,9 @@
+ <script src="page-webhooks.js"></script>
+ <script src="page-achievements.js"></script>
+ <script src="page-announcements.js"></script>
++<script src="page-currency.js"></script>
++<script src="page-mail.js"></script>
++<script src="page-bans.js"></script>
+ <script src="page-logs.js"></script>
+ <script src="page-settings.js"></script>
+ <script src="boot.js"></script>
+diff -ruN artifacts/prd-p3-20260920/pristine/web/admin/nav.js artifacts/prd-p3-20260920/current/web/admin/nav.js
+--- artifacts/prd-p3-20260920/pristine/web/admin/nav.js	2026-09-20 21:53:49.887075747 +0800
++++ artifacts/prd-p3-20260920/current/web/admin/nav.js	2026-09-20 21:55:06.859871163 +0800
+@@ -20,6 +20,9 @@
+   webhooks:  { title: 'WebHook',    scopes: ['game'], render: h => renderWebhooks(h) },
+   achievements: { title: '成就',    scopes: ['game'], render: h => renderAchievements(h) },
+   announcements: { title: '公告',  scopes: ['game'], render: h => renderAnnouncements(h) },
++  currency:  { title: '虚拟货币',   scopes: ['game'], render: h => renderCurrency(h) },
++  mail:      { title: '邮件',       scopes: ['game'], render: h => renderMail(h) },
++  bans:      { title: '封禁',       scopes: ['game'], render: h => renderBans(h) },
+   settings:  { title: '设置',       scopes: ['game'], render: h => renderSettings(h) },
+ 
+   logs:      { title: '日志',       scopes: ['platform', 'game'], render: h => renderLogs(h) },
+@@ -43,6 +46,9 @@
+   ['webhooks', 'M10 4a4 4 0 0 1 3.8 5.3l3.4 5.8a4 4 0 1 1-1.8 1L12 10.6a4 4 0 1 1-2-6.6Zm-3 13a4 4 0 0 1 3.9-4h4.2v2h-4.2a2 2 0 1 0 0 4H12v2h-1.1A4 4 0 0 1 7 17Z'],
+   ['achievements', 'M12 2 14.8 8l6.5.6-4.9 4.3 1.5 6.4L12 16l-5.9 3.3 1.5-6.4-4.9-4.3L9.2 8 12 2Z'],
+   ['announcements', 'M4 4h16v12H7l-3 3V4Zm3 4v2h10V8H7Zm0 4v2h7v-2H7Z'],
++  ['currency', 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15.9V19h-2v-1.1c-1.7-.3-3-1.5-3-3.4h2c0 1 .8 1.6 2 1.6s1.9-.5 1.9-1.3c0-.7-.5-1.1-2.2-1.5-2-.5-3.4-1.2-3.4-3 0-1.6 1.2-2.7 2.7-3V6h2v1.3c1.6.3 2.7 1.4 2.7 3.1h-2c0-.9-.6-1.5-1.7-1.5-1.1 0-1.7.5-1.7 1.2 0 .6.5 1 2.2 1.4 2 .5 3.4 1.3 3.4 3.1 0 1.7-1.3 2.9-2.9 3.3Z'],
++  ['mail', 'M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 4-8 5-8-5V6l8 5 8-5v2Z'],
++  ['bans', 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM4 12a8 8 0 0 1 12.9-6.3L5.7 16.9A8 8 0 0 1 4 12Zm8 8a8 8 0 0 1-4.9-1.7L18.3 7.1A8 8 0 0 1 12 20Z'],
+   ['logs', 'M4 3h16v2H4V3Zm0 4h16v2H4V7Zm0 4h10v2H4v-2Zm0 4h16v2H4v-2Zm0 4h10v2H4v-2Z'],
+   ['settings', 'M19.4 13a7.8 7.8 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.3 2.6c-.6.3-1.2.6-1.7 1l-2.4-1-2 3.4L4.6 11a7.8 7.8 0 0 0 0 2l-2 1.6 2 3.4 2.4-1c.5.4 1.1.8 1.7 1l.3 2.6h4l.3-2.6c.6-.2 1.2-.6 1.7-1l2.4 1 2-3.4-2-1.6ZM13 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z'],
+ ];
+diff -ruN artifacts/prd-p3-20260920/pristine/web/admin/page-bans.js artifacts/prd-p3-20260920/current/web/admin/page-bans.js
+--- artifacts/prd-p3-20260920/pristine/web/admin/page-bans.js	1970-01-01 08:00:00.000000000 +0800
++++ artifacts/prd-p3-20260920/current/web/admin/page-bans.js	2026-09-20 21:55:06.876565813 +0800
+@@ -0,0 +1,90 @@
++// Player bans: the audit list for a game, plus the ban / unban actions the
++// players page links into. A ban also invalidates tokens already issued, so
++// it takes effect without waiting for the player to log in again.
++
++async function renderBans(host) {
++  const { bans } = await api('GET', `/admin/api/games/${state.gameId}/bans`);
++  const rows = bans || [];
++
++  pageShell(host, {
++    title: '封禁记录',
++    subtitle: '封禁立即生效：已签发的令牌失效，封禁期内登录返回 403。',
++    actions: `<button class="btn filled" onclick="banDialog()">封禁玩家</button>`,
++    body: rows.length ? `<div class="card table-card"><table>
++        <thead><tr><th>玩家</th><th>原因</th><th>时长</th><th>状态</th><th>操作者</th><th>封禁时间</th><th></th></tr></thead>
++        <tbody>${rows.map(banRow).join('')}</tbody>
++      </table></div>`
++      : emptyState('🚫', '没有封禁记录', '在「玩家」页或这里封禁违规玩家,记录会留在这份清单里。'),
++  });
++}
++
++// A ban row has three possible outcomes, and they are not interchangeable:
++// manually lifted, expired on its own, or still in force.
++function banState(b) {
++  if (b.lifted_at) return { label: `已解禁 ${fmtAgo(b.lifted_at)}`, cls: '', active: false };
++  if (b.expires_at && new Date(b.expires_at) <= new Date()) {
++    return { label: '已到期', cls: '', active: false };
++  }
++  return { label: '封禁中', cls: 'error', active: true };
++}
++
++function banRow(b) {
++  const st = banState(b);
++  return `<tr>
++    <td><b>${esc(b.nickname) || '(未命名)'}</b><div class="dim"><code>${esc(b.player_id)}</code></div></td>
++    <td>${esc(b.reason)}</td>
++    <td class="dim">${b.expires_at ? `至 ${fmtTime(b.expires_at)}` : '永久'}</td>
++    <td><span class="badge ${st.cls}">${st.label}</span></td>
++    <td class="dim">${esc(b.operator) || '—'}</td>
++    <td class="dim">${fmtAgo(b.created_at)}</td>
++    <td>${st.active
++      ? `<button class="btn text" onclick="unbanPlayer(${inlineJSON(b.player_id)},${inlineJSON(b.nickname)})">解禁</button>`
++      : ''}</td>
++  </tr>`;
++}
++
++// Durations are offered as presets because typing a second count is where
++// operators get an order of magnitude wrong.
++const BAN_DURATIONS = [
++  ['3600', '1 小时'], ['86400', '1 天'], ['604800', '7 天'],
++  ['2592000', '30 天'], ['0', '永久'],
++];
++
++function banDialog(playerId = '', nickname = '') {
++  openDialog({
++    title: nickname ? `封禁「${nickname}」` : '封禁玩家',
++    body: `${playerId
++        ? `<div class="kv"><span>玩家 ID</span><b><code>${esc(playerId)}</code></b></div>`
++        : dlgField('banPlayer', '玩家 ID')}
++      ${dlgField('banReason', '封禁原因(必填)')}
++      <label class="field"><select id="banDuration">
++        ${BAN_DURATIONS.map(([secs, label]) =>
++          `<option value="${secs}">${label}</option>`).join('')}
++      </select><span class="label">封禁时长</span></label>`,
++    confirmText: '封禁', danger: true,
++    onConfirm: async () => {
++      const id = playerId || dlgVal('banPlayer');
++      if (!id) throw new Error('请输入玩家 ID');
++      const reason = dlgVal('banReason');
++      if (!reason) throw new Error('请填写封禁原因');
++      await api('POST', `/admin/api/players/${id}/ban`, {
++        reason, duration_secs: Number(document.getElementById('banDuration').value),
++      });
++      toast('已封禁');
++      await route();
++    },
++  });
++}
++
++function unbanPlayer(playerId, nickname) {
++  openDialog({
++    title: `解禁「${nickname || playerId}」?`,
++    body: `<p class="dim">解禁后该玩家可以立即重新登录。</p>`,
++    confirmText: '解禁',
++    onConfirm: async () => {
++      await api('POST', `/admin/api/players/${playerId}/unban`, {});
++      toast('已解禁');
++      await route();
++    },
++  });
++}
+diff -ruN artifacts/prd-p3-20260920/pristine/web/admin/page-currency.js artifacts/prd-p3-20260920/current/web/admin/page-currency.js
+--- artifacts/prd-p3-20260920/pristine/web/admin/page-currency.js	1970-01-01 08:00:00.000000000 +0800
++++ artifacts/prd-p3-20260920/current/web/admin/page-currency.js	2026-09-20 21:55:06.871847476 +0800
+@@ -0,0 +1,183 @@
++// Virtual currencies: the type catalogue (at most 8 per game), manual
++// compensation grants, and a lookup of any player's balance and ledger.
++
++const CURRENCY_MAX = 8;
++
++// Ledger rows are the audit trail for money, so the source of each row is
++// spelled out rather than shown as a raw enum.
++const LEDGER_KIND = {
++  grant: '发放', spend: '消费', mail: '邮件奖励', function: '云函数',
++};
++
++async function renderCurrency(host) {
++  const { currencies } = await api('GET', `/admin/api/games/${state.gameId}/currencies`);
++  const rows = currencies || [];
++  const full = rows.length >= CURRENCY_MAX;
++
++  pageShell(host, {
++    title: '虚拟货币',
++    subtitle: `服务端发放与消费，账本按幂等流水号去重。每个游戏最多 ${CURRENCY_MAX} 种货币。`,
++    actions: `
++      <button class="btn text" onclick="currencyPlayerDialog()">查玩家余额</button>
++      <button class="btn filled" onclick="currencyDialog()" ${full ? 'disabled' : ''}>
++        ${full ? '已达上限' : '新建货币'}</button>`,
++    body: rows.length ? `<div class="card table-card">
++        <div class="card-head">
++          <h2>货币种类</h2>
++          <span class="dim">${rows.length} / ${CURRENCY_MAX}</span>
++        </div>
++        <table>
++          <thead><tr><th>货币</th><th>标识</th><th>货币 ID</th><th>创建</th><th></th></tr></thead>
++          <tbody>${rows.map(currencyRow).join('')}</tbody>
++        </table>
++      </div>`
++      : emptyState('¤', '还没有货币',
++          '创建第一种货币(如金币、钻石)后,即可用管理接口或 <code>mc.currency.grant</code> 发放。'),
++  });
++}
++
++function currencyRow(c) {
++  return `<tr>
++    <td>
++      <b>${esc(c.display_name) || esc(c.name)}</b>
++      ${c.icon_url ? `<div class="dim">${esc(c.icon_url)}</div>` : ''}
++    </td>
++    <td><code>${esc(c.name)}</code></td>
++    <td>${idCell(c.id, '货币 ID')}</td>
++    <td class="dim">${fmtAgo(c.created_at)}</td>
++    <td><div class="row">
++      <button class="btn text" onclick="grantDialog(${inlineJSON(c)})">发放</button>
++      <button class="btn text" onclick="currencyDialog(${inlineJSON(c)})">编辑</button>
++      <button class="btn text danger" onclick="deleteCurrency(${inlineJSON(c.id)},${inlineJSON(c.display_name || c.name)})">删除</button>
++    </div></td>
++  </tr>`;
++}
++
++// name is immutable after creation: cloud functions and the ledger reference
++// it, so the backend only accepts display_name / icon_url on update.
++function currencyDialog(c = null) {
++  const editing = Boolean(c);
++  openDialog({
++    title: editing ? `编辑货币「${c.display_name || c.name}」` : '新建货币',
++    body: `${editing
++        ? `<div class="kv"><span>标识</span><b><code>${esc(c.name)}</code></b></div>`
++        : dlgField('curName', '标识(如 gold,创建后不可改)')}
++      ${dlgField('curDisplay', '显示名称', c?.display_name || '')}
++      ${dlgField('curIcon', '图标 URL', c?.icon_url || '')}`,
++    confirmText: editing ? '保存' : '创建',
++    onConfirm: async () => {
++      const payload = {
++        display_name: dlgVal('curDisplay'),
++        icon_url: dlgVal('curIcon'),
++      };
++      if (!editing) {
++        payload.name = dlgVal('curName');
++        if (!payload.name) throw new Error('请输入货币标识');
++        if (payload.name.length > 32) throw new Error('货币标识最长 32 个字符');
++      }
++      await api(editing ? 'PUT' : 'POST',
++        editing ? `/admin/api/currencies/${c.id}` : `/admin/api/games/${state.gameId}/currencies`,
++        payload);
++      toast(editing ? '已保存' : '已创建');
++      await route();
++    },
++  });
++}
++
++function deleteCurrency(id, name) {
++  confirmDelete(`货币「${name}」(连带余额与流水)`, async () => {
++    await api('DELETE', `/admin/api/currencies/${id}`);
++    toast('已删除');
++    await route();
++  });
++}
++
++// ---------- manual grant ----------
++
++// The idempotency key is what makes a retry safe, so it is prefilled rather
++// than left to the operator: an empty key would be rejected by the server.
++function grantDialog(c) {
++  openDialog({
++    title: `发放「${c.display_name || c.name}」`,
++    body: `${dlgField('grantPlayer', '玩家 ID')}
++      ${dlgField('grantAmount', '数量(正整数)', '', 'number')}
++      ${dlgField('grantKey', '幂等流水号', newIdempotencyKey())}
++      ${dlgField('grantNote', '备注(如活动补偿)', '')}
++      <p class="dim" style="margin-top:12px">同一流水号重复提交不会重复发放。</p>`,
++    confirmText: '发放',
++    onConfirm: async () => {
++      const playerId = dlgVal('grantPlayer');
++      if (!playerId) throw new Error('请输入玩家 ID');
++      const amount = Number(dlgVal('grantAmount'));
++      if (!Number.isInteger(amount) || amount <= 0) throw new Error('数量必须是正整数');
++      const key = dlgVal('grantKey');
++      if (!key) throw new Error('请填写幂等流水号');
++      const res = await api('POST',
++        `/admin/api/games/${state.gameId}/currency/${c.id}/grant`,
++        { player_id: playerId, amount, idempotency_key: key, note: dlgVal('grantNote') });
++      toast(res.duplicate
++        ? `该流水号已发放过,余额 ${fmtNum(res.balance)}`
++        : `已发放,余额 ${fmtNum(res.balance)}`);
++    },
++  });
++}
++
++function newIdempotencyKey() {
++  const rand = Math.random().toString(36).slice(2, 8);
++  return `admin-${Date.now()}-${rand}`;
++}
++
++// ---------- per-player lookup ----------
++
++function currencyPlayerDialog() {
++  openDialog({
++    title: '查玩家余额',
++    body: dlgField('balPlayer', '玩家 ID') +
++      `<p class="dim" style="margin-top:12px">玩家 ID 可在「玩家」页复制。</p>`,
++    confirmText: '查询',
++    onConfirm: async () => {
++      const playerId = dlgVal('balPlayer');
++      if (!playerId) throw new Error('请输入玩家 ID');
++      const { balances } = await api('GET', `/admin/api/players/${playerId}/currency`);
++      showPlayerBalances(playerId, balances || []);
++    },
++  });
++}
++
++function showPlayerBalances(playerId, balances) {
++  openDialog({
++    title: '玩家余额',
++    body: `<div class="kv"><span>玩家 ID</span><b><code>${esc(playerId)}</code></b></div>
++      ${balances.length
++        ? balances.map(b => `<div class="kv">
++            <span>${esc(b.display_name) || esc(b.name)}</span>
++            <b>${fmtNum(b.balance)}
++              <button class="btn text" onclick="showPlayerLedger(${inlineJSON(playerId)},${inlineJSON(b)})">流水</button>
++            </b></div>`).join('')
++        : `<p class="dim">这个游戏还没有定义货币。</p>`}`,
++    confirmText: '关闭',
++    onConfirm: async () => {},
++  });
++}
++
++async function showPlayerLedger(playerId, currency) {
++  const { entries } = await api('GET',
++    `/admin/api/players/${playerId}/currency/${currency.currency_id}/ledger?limit=50`);
++  const rows = entries || [];
++  openDialog({
++    title: `${currency.display_name || currency.name} · 流水`,
++    body: rows.length ? `<div class="table-card"><table>
++        <thead><tr><th>时间</th><th>来源</th><th style="text-align:right">变动</th><th style="text-align:right">余额</th><th>备注</th></tr></thead>
++        <tbody>${rows.map(e => `<tr>
++          <td class="dim">${fmtTime(e.created_at)}</td>
++          <td><span class="badge">${esc(LEDGER_KIND[e.kind] || e.kind)}</span></td>
++          <td style="text-align:right"><b class="amount ${e.amount < 0 ? 'down' : 'up'}">${e.amount > 0 ? '+' : ''}${fmtNum(e.amount)}</b></td>
++          <td style="text-align:right">${fmtNum(e.balance_after)}</td>
++          <td class="dim">${esc(e.note)}</td>
++        </tr>`).join('')}</tbody>
++      </table></div>`
++      : `<p class="dim">还没有流水记录。</p>`,
++    confirmText: '关闭',
++    onConfirm: async () => {},
++  });
++}
+diff -ruN artifacts/prd-p3-20260920/pristine/web/admin/page-mail.js artifacts/prd-p3-20260920/current/web/admin/page-mail.js
+--- artifacts/prd-p3-20260920/pristine/web/admin/page-mail.js	1970-01-01 08:00:00.000000000 +0800
++++ artifacts/prd-p3-20260920/current/web/admin/page-mail.js	2026-09-20 21:55:06.873920575 +0800
+@@ -0,0 +1,141 @@
++// In-game mail: send a broadcast or a targeted batch, optionally attaching
++// currency rewards, and review delivery / read / claim rates afterwards.
++
++const MAIL_MAX_RECIPIENTS = 1000;
++const MAIL_DEFAULT_DAYS = 30;
++
++async function renderMail(host) {
++  // The reward picker needs the currency catalogue, so both load together.
++  const [{ mail }, { currencies }] = await Promise.all([
++    api('GET', `/admin/api/games/${state.gameId}/mail`),
++    api('GET', `/admin/api/games/${state.gameId}/currencies`),
++  ]);
++  const rows = mail || [];
++  window.__mailCurrencies = currencies || [];
++
++  pageShell(host, {
++    title: '游戏内邮件',
++    subtitle: `向全服或指定玩家发送系统邮件，可附带货币奖励；默认 ${MAIL_DEFAULT_DAYS} 天有效。`,
++    actions: `<button class="btn filled" onclick="mailDialog()">发送邮件</button>`,
++    body: rows.length ? `<div class="card table-card"><table>
++        <thead><tr><th>邮件</th><th>投递</th><th>附件</th><th>已读</th><th>领取率</th><th>有效期</th><th></th></tr></thead>
++        <tbody>${rows.map(mailRow).join('')}</tbody>
++      </table></div>`
++      : emptyState('✉', '还没有邮件', '发送第一封邮件,用于活动补偿或全服福利。'),
++  });
++}
++
++function mailRow(m) {
++  const rewards = mailRewards(m);
++  // Broadcast mail has no recipient rows until a player interacts with it,
++  // so a claim *rate* is only meaningful for a targeted send.
++  const claimRate = m.broadcast
++    ? `${fmtNum(m.claimed)} 人`
++    : `${pct(m.claimed, m.recipients)} <span class="dim">(${fmtNum(m.claimed)}/${fmtNum(m.recipients)})</span>`;
++  const expired = new Date(m.expires_at) <= new Date();
++  return `<tr>
++    <td><b>${esc(m.title)}</b><div class="dim">${fmtAgo(m.created_at)}</div></td>
++    <td>${m.broadcast
++      ? '<span class="badge ok">全服广播</span>'
++      : `<span class="badge">定向 ${fmtNum(m.recipients)} 人</span>`}</td>
++    <td class="dim">${rewards.length ? rewards.map(r =>
++      `${esc(currencyLabel(r.currency_id))} ×${fmtNum(r.amount)}`).join('、') : '无'}</td>
++    <td class="dim">${fmtNum(m.read_count)}</td>
++    <td>${claimRate}</td>
++    <td class="dim">${expired ? '<span class="badge">已过期</span>' : fmtUntil(m.expires_at)}</td>
++    <td><button class="btn text" onclick="previewMail(${inlineJSON(m)})">查看</button></td>
++  </tr>`;
++}
++
++// rewards arrives as JSON from the API and may be null for older rows.
++function mailRewards(m) {
++  return Array.isArray(m.rewards) ? m.rewards : [];
++}
++
++function currencyLabel(id) {
++  const c = (window.__mailCurrencies || []).find(x => x.id === id);
++  return c ? (c.display_name || c.name) : id;
++}
++
++function mailDialog() {
++  const currencies = window.__mailCurrencies || [];
++  openDialog({
++    title: '发送邮件',
++    body: `${dlgField('mailTitle', '标题')}
++      <label class="field"><textarea id="mailBody" placeholder=" "></textarea><span class="label">正文</span></label>
++      <label class="check"><input id="mailBroadcast" type="checkbox" checked onchange="toggleMailRecipients()"> 全服广播</label>
++      <label class="field" id="mailRecipientsField" hidden>
++        <textarea id="mailRecipients" placeholder=" "></textarea>
++        <span class="label">收件玩家 ID(每行一个,最多 ${MAIL_MAX_RECIPIENTS} 个)</span></label>
++      ${dlgField('mailExpires', `有效期天数(留空=${MAIL_DEFAULT_DAYS} 天)`, '', 'number')}
++      <div class="card-head" style="margin:20px 0 8px"><h2 style="font-size:15px">货币奖励</h2></div>
++      ${currencies.length
++        ? currencies.map(c => `<div class="kv">
++            <span>${esc(c.display_name || c.name)}</span>
++            <input class="reward-input" type="number" min="0" id="reward_${esc(c.id)}" placeholder="0">
++          </div>`).join('')
++        : `<p class="dim">这个游戏还没有定义货币,邮件将不带附件。</p>`}`,
++    confirmText: '发送',
++    onConfirm: async () => {
++      const title = dlgVal('mailTitle');
++      if (!title) throw new Error('请输入邮件标题');
++
++      const broadcast = document.getElementById('mailBroadcast').checked;
++      let recipients = 'all';
++      if (!broadcast) {
++        recipients = document.getElementById('mailRecipients').value
++          .split('\n').map(s => s.trim()).filter(Boolean);
++        if (!recipients.length) throw new Error('请填写至少一个收件玩家 ID');
++        if (recipients.length > MAIL_MAX_RECIPIENTS) {
++          throw new Error(`一次最多 ${MAIL_MAX_RECIPIENTS} 个收件人`);
++        }
++      }
++
++      const rewards = [];
++      for (const c of currencies) {
++        const amount = Number(document.getElementById(`reward_${c.id}`).value);
++        if (!amount) continue;
++        if (!Number.isInteger(amount) || amount <= 0) {
++          throw new Error(`「${c.display_name || c.name}」的奖励数量必须是正整数`);
++        }
++        rewards.push({ currency_id: c.id, amount });
++      }
++
++      const payload = { title, body: document.getElementById('mailBody').value, recipients, rewards };
++      const days = dlgVal('mailExpires');
++      if (days) {
++        const n = Number(days);
++        if (!Number.isInteger(n) || n <= 0) throw new Error('有效期天数必须是正整数');
++        payload.expires_in = n * 86400;
++      }
++
++      const res = await api('POST', `/admin/api/games/${state.gameId}/mail`, payload);
++      toast(broadcast ? '已全服发送' : `已投递 ${fmtNum(res.delivered)} 人`);
++      await route();
++    },
++  });
++  toggleMailRecipients();
++}
++
++function toggleMailRecipients() {
++  const broadcast = document.getElementById('mailBroadcast');
++  const field = document.getElementById('mailRecipientsField');
++  if (broadcast && field) field.hidden = broadcast.checked;
++}
++
++function previewMail(m) {
++  const rewards = mailRewards(m);
++  openDialog({
++    title: `邮件 · ${m.title}`,
++    body: `<div class="announcement-preview"><h3>${esc(m.title)}</h3>
++        <p>${esc(m.body).replace(/\n/g, '<br>') || '(无正文)'}</p></div>
++      <div class="kv"><span>附件</span><b>${rewards.length
++        ? rewards.map(r => `${esc(currencyLabel(r.currency_id))} ×${fmtNum(r.amount)}`).join('、')
++        : '无'}</b></div>
++      <div class="kv"><span>投递</span><b>${m.broadcast ? '全服广播' : `定向 ${fmtNum(m.recipients)} 人`}</b></div>
++      <div class="kv"><span>已读 / 已领取</span><b>${fmtNum(m.read_count)} / ${fmtNum(m.claimed)}</b></div>
++      <div class="kv"><span>过期时间</span><b>${fmtTime(m.expires_at)}</b></div>`,
++    confirmText: '关闭',
++    onConfirm: async () => {},
++  });
++}
+diff -ruN artifacts/prd-p3-20260920/pristine/web/admin/page-overview.js artifacts/prd-p3-20260920/current/web/admin/page-overview.js
+--- artifacts/prd-p3-20260920/pristine/web/admin/page-overview.js	2026-09-20 21:53:49.896728510 +0800
++++ artifacts/prd-p3-20260920/current/web/admin/page-overview.js	2026-09-20 21:55:06.869552422 +0800
+@@ -3,10 +3,12 @@
+ 
+ async function renderOverview(host) {
+   const id = state.gameId;
+-  const [stats, logs, releases] = await Promise.all([
++  const [stats, logs, releases, retention, funnel] = await Promise.all([
+     api('GET', `/admin/api/games/${id}/stats?days=30`),
+     api('GET', `/admin/api/logs?game_id=${id}&level=error&limit=5`),
+     api('GET', `/admin/api/games/${id}/releases`),
++    api('GET', `/admin/api/games/${id}/stats/retention?days=30`),
++    api('GET', `/admin/api/games/${id}/stats/funnel?days=30`),
+   ]);
+ 
+   const days = stats.days;
+@@ -35,6 +37,9 @@
+         ${trendChart(days, 'active')}
+       </div>
+ 
++      ${retentionCard(retention.days || [])}
++      ${funnelCard(funnel.steps || [], funnel.window)}
++
+       <div class="split">
+         <div class="card">
+           <div class="card-head">
+@@ -68,3 +73,119 @@
+       </div>`,
+   });
+ }
++
++// ---------- retention ----------
++
++// A dN column is only filled once the cohort is old enough for the answer to
++// be final (d1 after 2 days, d7 after 8, d30 after 31), so a null means "not
++// yet known" and must not be drawn as 0%.
++const RETENTION_SERIES = [
++  ['d1', '次日留存', 'D1'],
++  ['d7', '7 日留存', 'D7'],
++  ['d30', '30 日留存', 'D30'],
++];
++
++function retentionRate(row, key) {
++  if (!row.cohort || row[key] == null) return null;
++  return row[key] / row.cohort;
++}
++
++// The headline number is the most recent cohort that has a final answer,
++// which is more honest than averaging over half-finished cohorts.
++function latestRate(rows, key) {
++  for (let i = rows.length - 1; i >= 0; i--) {
++    const rate = retentionRate(rows[i], key);
++    if (rate != null) return { rate, row: rows[i] };
++  }
++  return null;
++}
++
++function retentionCard(rows) {
++  if (!rows.length) {
++    return `<div class="card">
++      <div class="card-head"><h2>留存率</h2></div>
++      ${emptyState('📈', '还没有留存数据', '留存按注册日分群,每小时计算一次;新游戏需要等第一批玩家满一天。')}
++    </div>`;
++  }
++  return `<div class="card">
++    <div class="card-head">
++      <h2>留存率</h2>
++      <span class="dim">按注册日分群 · 近 ${rows.length} 天</span>
++    </div>
++    <div class="tiles compact">
++      ${RETENTION_SERIES.map(([key, label]) => {
++        const latest = latestRate(rows, key);
++        return tile(label,
++          latest ? Math.round(latest.rate * 100) + '%' : '—',
++          latest ? `${latest.row.date} 注册的 ${fmtNum(latest.row.cohort)} 人`
++                 : '样本还不够,需要更多时间');
++      }).join('')}
++    </div>
++    ${retentionChart(rows)}
++  </div>`;
++}
++
++// One row of bars per cohort day, three series side by side. Cohorts whose
++// answer is not final yet are rendered as a gap, not a zero-height bar.
++function retentionChart(rows) {
++  return `<div class="retention-chart">
++      ${rows.map(row => `<div class="retention-day" title="${row.date}:注册 ${row.cohort} 人${
++          RETENTION_SERIES.map(([key, , short]) => {
++            const rate = retentionRate(row, key);
++            return rate == null ? '' : ` · ${short} ${Math.round(rate * 100)}%`;
++          }).join('')}">
++        ${RETENTION_SERIES.map(([key]) => {
++          const rate = retentionRate(row, key);
++          return rate == null
++            ? `<div class="retention-bar pending"></div>`
++            : `<div class="retention-bar ${key}" style="height:${Math.max(2, Math.round(rate * 100))}%"></div>`;
++        }).join('')}
++      </div>`).join('')}
++    </div>
++    <div class="chart-axis">
++      <span>${rows[0]?.date || ''}</span>
++      <span>${RETENTION_SERIES.map(([key, label]) =>
++        `<span class="legend"><i class="swatch ${key}"></i>${label}</span>`).join(' ')}</span>
++      <span>${rows[rows.length - 1]?.date || ''}</span>
++    </div>`;
++}
++
++// ---------- registration funnel ----------
++
++const FUNNEL_LABEL = {
++  registered: '注册',
++  first_login: '首次登录',
++  returned_7d: '7 天内再次登录',
++};
++
++function funnelCard(steps, windowDays) {
++  const top = steps[0]?.count || 0;
++  if (!top) {
++    return `<div class="card">
++      <div class="card-head"><h2>注册漏斗</h2></div>
++      ${emptyState('🪣', '还没有漏斗数据', '漏斗只统计已满 7 天、结果已确定的注册分群。')}
++    </div>`;
++  }
++  return `<div class="card">
++    <div class="card-head">
++      <h2>注册漏斗</h2>
++      <span class="dim">近 ${windowDays || 30} 天已满 7 天的分群</span>
++    </div>
++    <div class="funnel">
++      ${steps.map((s, i) => {
++        const share = s.count / top;
++        const prev = i ? steps[i - 1].count : s.count;
++        return `<div class="funnel-step">
++          <div class="funnel-head">
++            <span>${esc(FUNNEL_LABEL[s.name] || s.name)}</span>
++            <b>${fmtNum(s.count)} <span class="dim">${Math.round(share * 100)}%</span></b>
++          </div>
++          <div class="funnel-track">
++            <div class="funnel-fill" style="width:${Math.max(1, share * 100)}%"></div>
++          </div>
++          ${i ? `<div class="dim funnel-drop">较上一步 ${pct(s.count, prev)}</div>` : ''}
++        </div>`;
++      }).join('')}
++    </div>
++  </div>`;
++}
+diff -ruN artifacts/prd-p3-20260920/pristine/web/admin/page-players.js artifacts/prd-p3-20260920/current/web/admin/page-players.js
+--- artifacts/prd-p3-20260920/pristine/web/admin/page-players.js	2026-09-20 21:53:49.894312351 +0800
++++ artifacts/prd-p3-20260920/current/web/admin/page-players.js	2026-09-20 21:55:06.867182567 +0800
+@@ -15,7 +15,7 @@
+                onkeydown="if(event.key==='Enter'){window.__playerSearch=this.value;route()}">
+         <span class="label">搜索昵称 / 标识</span></label>`,
+     body: players.length ? `<div class="card table-card"><table>
+-        <thead><tr><th>昵称</th><th>登录方式</th><th>标识</th><th>注册</th><th>最近登录</th></tr></thead>
++        <thead><tr><th>昵称</th><th>登录方式</th><th>标识</th><th>注册</th><th>最近登录</th><th></th></tr></thead>
+         <tbody>${players.map(p => `<tr class="clickable" onclick="showPlayer('${p.id}','${esc(p.nickname)}')">
+           <td><b>${esc(p.nickname) || '(未命名)'}</b>${p.banned ? ' <span class="badge error">封禁</span>' : ''}</td>
+           <td><span class="badge">${PROVIDER_LABEL[p.provider] || esc(p.provider)}</span>
+@@ -23,6 +23,9 @@
+           <td class="dim"><code>${esc(p.identifier)}</code></td>
+           <td class="dim">${fmtAgo(p.created_at)}</td>
+           <td class="dim">${fmtAgo(p.last_login_at)}</td>
++          <td onclick="event.stopPropagation()">${p.banned
++            ? `<button class="btn text" onclick="unbanPlayer(${inlineJSON(p.id)},${inlineJSON(p.nickname)})">解禁</button>`
++            : `<button class="btn text danger" onclick="banDialog(${inlineJSON(p.id)},${inlineJSON(p.nickname)})">封禁</button>`}</td>
+         </tr>`).join('')}</tbody></table></div>`
+       : emptyState('🙋', search ? '没有匹配的玩家' : '还没有玩家',
+                    search ? '换个关键词试试。'
+@@ -36,7 +39,8 @@
+   const { entries } = await api('GET', `/admin/api/players/${id}/data`);
+   openDialog({
+     title: `${nickname} 的存档`,
+-    body: entries.length
++    body: `<div class="kv"><span>玩家 ID</span>${idCell(id, '玩家 ID')}</div>` +
++      (entries.length
+       ? entries.map(e => `
+           <div class="save-slot">
+             <div class="save-head">
+@@ -45,7 +49,7 @@
+             </div>
+             <pre class="save-body">${esc(JSON.stringify(e.value, null, 2))}</pre>
+           </div>`).join('')
+-      : `<p class="dim">这个玩家还没有任何存档。</p>`,
++      : `<p class="dim">这个玩家还没有任何存档。</p>`),
+     confirmText: '关闭',
+     onConfirm: async () => {},
+   });

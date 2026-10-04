@@ -1,0 +1,669 @@
+<title>MiniCloud 下阶段功能规划 PRD</title>
+<style>
+:root {
+  --bg: #F3F5FB; --surface: #FFFFFF; --surface-2: #F8F9FD;
+  --border: #DDE2EF; --text: #0D111E; --text-sub: #5A6178;
+  --accent: #3A6EF0; --accent-bg: #EEF2FF;
+  --p2: #3A6EF0; --p2-bg: #EEF2FF;
+  --p3: #0F9D6A; --p3-bg: #E6F7F2;
+  --p4: #7C3AED; --p4-bg: #F3EEFF;
+  --tag-h: #DC2626; --tag-m: #D97706; --tag-l: #16A34A;
+  --mono: 'SF Mono','Fira Code','Consolas',monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#0C0E18; --surface:#13151F; --surface-2:#1A1D2A;
+    --border:#252836; --text:#E6EAF5; --text-sub:#7A829A;
+    --accent:#5A8AF5; --accent-bg:#151C35;
+    --p2:#5A8AF5; --p2-bg:#151C35;
+    --p3:#1DB87A; --p3-bg:#0A2018;
+    --p4:#A78BFA; --p4-bg:#1A1030;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:#0C0E18; --surface:#13151F; --surface-2:#1A1D2A;
+  --border:#252836; --text:#E6EAF5; --text-sub:#7A829A;
+  --accent:#5A8AF5; --accent-bg:#151C35;
+  --p2:#5A8AF5; --p2-bg:#151C35;
+  --p3:#1DB87A; --p3-bg:#0A2018;
+  --p4:#A78BFA; --p4-bg:#1A1030;
+}
+</style>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font: 400 15px/1.7 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.layout { display: flex; min-height: 100vh; }
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 220px; flex-shrink: 0; position: sticky; top: 0;
+  height: 100vh; overflow-y: auto; border-right: 1px solid var(--border);
+  background: var(--surface); padding: 24px 0; display: flex; flex-direction: column; gap: 24px;
+}
+.sidebar-brand { padding: 0 20px; }
+.brand-name { font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.brand-meta { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+.nav-section { padding: 0 12px; }
+.nav-phase { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin-bottom: 2px; }
+.phase-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.phase-dot.p2 { background: var(--p2); }
+.phase-dot.p3 { background: var(--p3); }
+.phase-dot.p4 { background: var(--p4); }
+.nav-phase-label { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-sub); }
+.nav-sub { display: block; padding: 4px 8px 4px 22px; font-size: 13px; color: var(--text-sub); border-radius: 4px; }
+.nav-sub:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+
+/* ── Main ── */
+.main { flex: 1; max-width: 820px; padding: 48px 56px 80px; }
+
+/* ── Overview ── */
+.doc-title { font-size: 28px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; }
+.doc-subtitle { font-size: 15px; color: var(--text-sub); margin-top: 8px; }
+.meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.meta-chip { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; letter-spacing: .03em;
+  background: var(--surface-2); color: var(--text-sub); border: 1px solid var(--border); }
+.overview-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-top: 32px; }
+.ov-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.ov-phase { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; margin-bottom: 6px; }
+.ov-phase.p2 { color: var(--p2); } .ov-phase.p3 { color: var(--p3); } .ov-phase.p4 { color: var(--p4); }
+.ov-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.ov-desc { font-size: 12px; color: var(--text-sub); line-height: 1.5; }
+
+/* ── Phase sections ── */
+.phase-section { margin-top: 56px; }
+.phase-header { display: flex; align-items: baseline; gap: 12px; padding-bottom: 12px; border-bottom: 2px solid var(--border); margin-bottom: 32px; }
+.phase-header.p2 { border-color: var(--p2); }
+.phase-header.p3 { border-color: var(--p3); }
+.phase-header.p4 { border-color: var(--p4); }
+.phase-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; }
+.phase-eyebrow.p2 { color: var(--p2); background: var(--p2-bg); }
+.phase-eyebrow.p3 { color: var(--p3); background: var(--p3-bg); }
+.phase-eyebrow.p4 { color: var(--p4); background: var(--p4-bg); }
+.phase-title { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.phase-timeline { font-size: 13px; color: var(--text-sub); margin-left: auto; flex-shrink: 0; }
+
+/* ── Feature cards ── */
+.feature { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 20px; overflow: hidden; }
+.feature-head { display: flex; align-items: flex-start; gap: 12px; padding: 20px 20px 14px; }
+.feature-accent { width: 3px; border-radius: 2px; flex-shrink: 0; align-self: stretch; min-height: 24px; }
+.feature-accent.p2 { background: var(--p2); }
+.feature-accent.p3 { background: var(--p3); }
+.feature-accent.p4 { background: var(--p4); }
+.feature-meta { flex: 1; }
+.feature-name { font-size: 16px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 4px; }
+.feature-desc { font-size: 13px; color: var(--text-sub); line-height: 1.6; }
+.feature-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; letter-spacing: .03em; }
+.chip-pri-h { background: #FEE2E2; color: var(--tag-h); }
+.chip-pri-m { background: #FEF3C7; color: var(--tag-m); }
+.chip-pri-l { background: #DCFCE7; color: var(--tag-l); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .chip-pri-h { background: #2D1212; }
+  :root:not([data-theme="light"]) .chip-pri-m { background: #2D1F08; }
+  :root:not([data-theme="light"]) .chip-pri-l { background: #0B2010; }
+}
+:root[data-theme="dark"] .chip-pri-h { background: #2D1212; }
+:root[data-theme="dark"] .chip-pri-m { background: #2D1F08; }
+:root[data-theme="dark"] .chip-pri-l { background: #0B2010; }
+.chip-effort { background: var(--surface-2); color: var(--text-sub); border: 1px solid var(--border); }
+.chip-new { background: var(--accent-bg); color: var(--accent); }
+.feature-body { padding: 0 20px 20px 35px; display: flex; flex-direction: column; gap: 14px; }
+.req-list { list-style: none; }
+.req-list li { font-size: 13px; color: var(--text); padding: 3px 0 3px 16px; position: relative; line-height: 1.55; }
+.req-list li::before { content: '—'; position: absolute; left: 0; color: var(--text-sub); font-size: 12px; }
+.section-label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-sub); margin-bottom: 6px; }
+
+/* ── API table ── */
+.api-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.api-table tr { border-bottom: 1px solid var(--border); }
+.api-table tr:last-child { border-bottom: none; }
+.api-table td { padding: 6px 8px; vertical-align: top; }
+.api-table td:first-child { font-family: var(--mono); color: var(--accent); white-space: nowrap; font-size: 11.5px; }
+.api-table td:nth-child(2) { color: var(--text-sub); }
+.table-wrap { border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; background: var(--surface-2); }
+.oos { font-size: 12px; color: var(--text-sub); background: var(--surface-2); border-radius: 6px; padding: 10px 12px; border-left: 3px solid var(--border); }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .layout { flex-direction: column; }
+  .sidebar { width: 100%; height: auto; position: static; flex-direction: row; flex-wrap: wrap; padding: 12px 16px; gap: 8px; }
+  .main { padding: 24px 20px 48px; }
+  .overview-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="layout">
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-name">MiniCloud</div>
+    <div class="brand-meta">下阶段功能规划 · 2026-08</div>
+  </div>
+  <nav class="nav-section">
+    <div class="nav-phase"><span class="phase-dot p2"></span><span class="nav-phase-label">Phase 2</span></div>
+    <a href="#p2-friends" class="nav-sub">好友系统</a>
+    <a href="#p2-achievements" class="nav-sub">成就系统</a>
+    <a href="#p2-announcements" class="nav-sub">服务器公告</a>
+    <div class="nav-phase" style="margin-top:12px"><span class="phase-dot p3"></span><span class="nav-phase-label">Phase 3</span></div>
+    <a href="#p3-currency" class="nav-sub">虚拟货币</a>
+    <a href="#p3-mail" class="nav-sub">游戏内邮件</a>
+    <a href="#p3-retention" class="nav-sub">留存统计</a>
+    <a href="#p3-ban" class="nav-sub">玩家管理增强</a>
+    <div class="nav-phase" style="margin-top:12px"><span class="phase-dot p4"></span><span class="nav-phase-label">Phase 4</span></div>
+    <a href="#p4-sdk" class="nav-sub">JS/TS SDK</a>
+    <a href="#p4-kv" class="nav-sub">游戏级 KV API</a>
+    <a href="#p4-ws" class="nav-sub">WS 水平扩展</a>
+    <a href="#p4-export" class="nav-sub">数据导出</a>
+  </nav>
+</aside>
+
+<main class="main">
+  <div class="doc-title">MiniCloud 下阶段功能规划</div>
+  <div class="doc-subtitle">面向小游戏 BaaS 平台的社交层、运营工具与平台扩展能力</div>
+  <div class="meta-row">
+    <span class="meta-chip">状态：草稿</span>
+    <span class="meta-chip">日期：2026-08</span>
+    <span class="meta-chip">当前已有 8 张迁移</span>
+    <span class="meta-chip">作者：待填</span>
+  </div>
+  <div class="overview-grid">
+    <div class="ov-card">
+      <div class="ov-phase p2">Phase 2 · 社交层</div>
+      <div class="ov-title">好友、成就、公告</div>
+      <div class="ov-desc">玩家之间产生连接，成就驱动游戏性，公告提供运营触达手段。</div>
+    </div>
+    <div class="ov-card">
+      <div class="ov-phase p3">Phase 3 · 运营工具</div>
+      <div class="ov-title">货币、邮件、留存、封禁</div>
+      <div class="ov-desc">发奖、触达玩家、分析留存、处置违规的完整工具链。</div>
+    </div>
+    <div class="ov-card">
+      <div class="ov-phase p4">Phase 4 · 平台扩展</div>
+      <div class="ov-title">SDK、KV API、集群、导出</div>
+      <div class="ov-desc">降低接入成本，支持多实例，满足合规数据可携带需求。</div>
+    </div>
+  </div>
+
+  <!-- ════════════════ PHASE 2 ════════════════ -->
+  <div class="phase-section">
+    <div class="phase-header p2">
+      <span class="phase-eyebrow p2">Phase 2</span>
+      <span class="phase-title">社交层</span>
+      <span class="phase-timeline">预计工期 10–12 周</span>
+    </div>
+
+    <!-- F1 好友 -->
+    <div class="feature" id="p2-friends">
+      <div class="feature-head">
+        <div class="feature-accent p2"></div>
+        <div class="feature-meta">
+          <div class="feature-name">好友系统</div>
+          <div class="feature-desc">玩家互加好友、查看好友在线状态，排行榜支持按好友范围过滤。社交关系是小游戏留存的核心驱动，当前平台完全缺失这一层。</div>
+          <div class="feature-chips">
+            <span class="chip chip-pri-h">优先级：高</span>
+            <span class="chip chip-effort">工期 ~3 周</span>
+            <span class="chip chip-new">新模块</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-body">
+        <div>
+          <div class="section-label">核心需求</div>
+          <ul class="req-list">
+            <li>发起 / 接受 / 拒绝 / 撤回好友请求；双向确认后才建立好友关系</li>
+            <li>好友列表返回每人在线状态（基于 WebSocket 心跳，精度 30 s）</li>
+            <li>排行榜接口新增 <code>?scope=friends</code>，仅返回好友范围 TopN</li>
+            <li>好友数上限可在控制台按游戏配置（默认 200）</li>
+            <li>屏蔽：屏蔽后对方无法发请求，WS 房间消息对其不可见</li>
+          </ul>
+        </div>
+        <div>
+          <div class="section-label">API 接口</div>
+          <div class="table-wrap"><table class="api-table">
+            <tr><td>POST /v1/friends/request</td><td>{"target_player_id"} 发送好友请求</td></tr>
+            <tr><td>POST /v1/friends/accept</td><td>{"request_id"} 接受</td></tr>
+            <tr><td>POST /v1/friends/decline</td><td>{"request_id"} 拒绝 / 撤回</td></tr>
+            <tr><td>GET /v1/friends</td><td>好友列表（含在线状态）</td></tr>
+            <tr><td>GET /v1/friends/requests</td><td>待处理请求（发出 + 收到）</td></tr>
+            <tr><td>DELETE /v1/friends/{player_id}</td><td>删除好友</td></tr>
+            <tr><td>POST /v1/friends/block</td><td>{"target_player_id"} 屏蔽</td></tr>
+          </table></div>
+        </div>
+        <div class="oos">暂不做：好友私信（WS 频道后续复用）；跨游戏好友关系（通行证层后续考虑）</div>
+      </div>
+    </div>
+
+    <!-- F2 成就 -->
+    <div class="feature" id="p2-achievements">
+      <div class="feature-head">
+        <div class="feature-accent p2"></div>
+        <div class="feature-meta">
+          <div class="feature-name">成就系统</div>
+          <div class="feature-desc">控制台定义成就，服务端（云函数或管理 API）触发解锁，客户端查询。成就是最普遍的留存机制之一，实现成本低、驱动回访效果强。</div>
+          <div class="feature-chips">
+            <span class="chip chip-pri-h">优先级：高</span>
+            <span class="chip chip-effort">工期 ~2 周</span>
+            <span class="chip chip-new">新模块</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-body">
+        <div>
+          <div class="section-label">核心需求</div>
+          <ul class="req-list">
+            <li>成就定义：名称、描述、图标 URL、稀有度（common / rare / epic / legendary）、隐藏标记</li>
+            <li>即时型（一次触发解锁）和进度型（progress / target，达到 target 自动解锁）</li>
+            <li>服务端解锁接口幂等：重复调用不报错，返回已解锁时间</li>
+            <li>客户端查：已解锁列表（含时间）；全部成就列表（隐藏成就未解锁时不暴露名称和描述）</li>
+            <li>WebHook 新增 <code>achievement.unlocked</code> 事件</li>
+          </ul>
+        </div>
+        <div>
+          <div class="section-label">API 接口</div>
+          <div class="table-wrap"><table class="api-table">
+            <tr><td>GET /v1/achievements</td><td>全部成就列表（含我的解锁状态）</td></tr>
+            <tr><td>GET /v1/achievements/unlocked</td><td>我的已解锁列表</td></tr>
+            <tr><td>POST /admin/api/games/{id}/achievements</td><td>创建成就定义</td></tr>
+            <tr><td>PUT /admin/api/achievements/{aid}</td><td>编辑定义</td></tr>
+            <tr><td>DELETE /admin/api/achievements/{aid}</td><td>删除（未解锁的才能删）</td></tr>
+            <tr><td>POST /admin/api/achievements/{aid}/unlock</td><td>{"player_id","progress"?} 服务端解锁</td></tr>
+          </table></div>
+        </div>
+        <div class="oos">暂不做：成就积分商城；客户端自报解锁（必须服务端触发，防作弊）</div>
+      </div>
+    </div>
+
+    <!-- F3 公告 -->
+    <div class="feature" id="p2-announcements">
+      <div class="feature-head">
+        <div class="feature-accent p2"></div>
+        <div class="feature-meta">
+          <div class="feature-name">服务器公告</div>
+          <div class="feature-desc">控制台发布全服公告，客户端轮询拉取。用于版本更新提示、活动通知、维护通知等运营场景，是最轻量的运营触达手段。</div>
+          <div class="feature-chips">
+            <span class="chip chip-pri-m">优先级：中</span>
+            <span class="chip chip-effort">工期 ~1 周</span>
+            <span class="chip chip-new">新模块</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-body">
+        <div>
+          <div class="section-label">核心需求</div>
+          <ul class="req-list">
+            <li>公告字段：标题、正文（Markdown）、重要性（info / warning / critical）、有效期</li>
+            <li>客户端用 <code>?after_id=</code> 增量拉取，减少重复传输</li>
+            <li>可定向：全服 或 按 platform/channel 过滤</li>
+            <li>控制台列表管理（发布 / 下架 / 预览）</li>
+          </ul>
+        </div>
+        <div>
+          <div class="section-label">API 接口</div>
+          <div class="table-wrap"><table class="api-table">
+            <tr><td>GET /v1/apps/{app_id}/announcements</td><td>?after_id= 增量拉取（无需令牌）</td></tr>
+            <tr><td>POST /admin/api/games/{id}/announcements</td><td>发布公告</td></tr>
+            <tr><td>PUT/DELETE /admin/api/announcements/{aid}</td><td>编辑 / 下架</td></tr>
+          </table></div>
+        </div>
+        <div class="oos">暂不做：Push 通知推送（需接 APNs/FCM，Phase 4+ 再评估）</div>
+      </div>
+    </div>
+  </div><!-- /phase-section p2 -->
+
+  <!-- ════════════════ PHASE 3 ════════════════ -->
+  <div class="phase-section">
+    <div class="phase-header p3">
+      <span class="phase-eyebrow p3">Phase 3</span>
+      <span class="phase-title">运营工具</span>
+      <span class="phase-timeline">预计工期 8–10 周</span>
+    </div>
+
+    <!-- F4 虚拟货币 -->
+    <div class="feature" id="p3-currency">
+      <div class="feature-head">
+        <div class="feature-accent p3"></div>
+        <div class="feature-meta">
+          <div class="feature-name">虚拟货币</div>
+          <div class="feature-desc">每款游戏可定义多种货币（如金币、钻石），服务端发放与消费，带幂等流水账本。为后续商店、邮件奖励、成就奖励提供统一的资产层。</div>
+          <div class="feature-chips">
+            <span class="chip chip-pri-h">优先级：高</span>
+            <span class="chip chip-effort">工期 ~3 周</span>
+            <span class="chip chip-new">新模块</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-body">
+        <div>
+          <div class="section-label">核心需求</div>
+          <ul class="req-list">
+            <li>控制台定义货币种类（name, display_name, icon_url）；每游戏最多 8 种</li>
+            <li>发放接口（管理 API + 云函数 <code>mc.currency.grant</code>）：幂等，带业务流水号 <code>idempotency_key</code></li>
+            <li>消费接口：原子扣减，余额不足返回 402；同样幂等</li>
+            <li>查询：玩家余额列表；账本明细分页（来源、时间、备注）</li>
+            <li>控制台可查看任意玩家余额和流水，支持人工补偿</li>
+          </ul>
+        </div>
+        <div>
+          <div class="section-label">API 接口</div>
+          <div class="table-wrap"><table class="api-table">
+            <tr><td>GET /v1/currency</td><td>我的各货币余额</td></tr>
+            <tr><td>GET /v1/currency/{cid}/ledger</td><td>我的流水明细（分页）</td></tr>
+            <tr><td>POST /admin/api/games/{id}/currency/{cid}/grant</td><td>{"player_id","amount","idempotency_key","note"?}</td></tr>
+            <tr><td>POST /v1/currency/{cid}/spend</td><td>{"amount","idempotency_key","note"?} 消费（玩家令牌）</td></tr>
+            <tr><td>POST/GET /admin/api/games/{id}/currencies</td><td>货币种类 CRUD</td></tr>
+          </table></div>
+        </div>
+        <div class="oos">暂不做：真实支付接入；货币交易所；货币有效期</div>
+      </div>
+    </div>
+
+    <!-- F5 游戏内邮件 -->
+    <div class="feature" id="p3-mail">
+      <div class="feature-head">
+        <div class="feature-accent p3"></div>
+        <div class="feature-meta">
+          <div class="feature-name">游戏内邮件 / 奖励发放</div>
+          <div class="feature-desc">控制台向玩家发送系统邮件，可附带货币奖励。用于活动补偿、全服福利、定向奖励，比直接调 grant 接口多了可审计的操作记录和玩家主动领取的体验。</div>
+          <div class="feature-chips">
+            <span class="chip chip-pri-m">优先级：中</span>
+            <span class="chip chip-effort">工期 ~2 周</span>
+            <span class="chip chip-new">新模块</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-body">
+        <div>
+          <div class="section-label">核心需求</div>
+          <ul class="req-list">
+            <li>发送方式：全服广播 或 按 player_id 列表精准投递（最多 1000 条/次）</li>
+            <li>邮件可携带货币奖励（多种货币）；玩家领取时原子发放，幂等</li>
+            <li>邮件有效期（默认 30 天），过期未领则作废</li>
+            <li>客户端查收件箱（未读数角标）、标记已读、领取附件；一次性领取</li>
+            <li>控制台可查看邮件投递记录和领取率</li>
+          </ul>
+        </div>
+        <div>
+          <div class="section-label">API 接口</div>
+          <div class="table-wrap"><table class="api-table">
+            <tr><td>GET /v1/mailbox</td><td>收件箱列表（?unread_only=true）</td></tr>
+            <tr><td>POST /v1/mailbox/{mid}/claim</td><td>领取附件奖励</td></tr>
+            <tr><td>POST /v1/mailbox/{mid}/read</td><td>标记已读</td></tr>
+            <tr><td>POST /admin/api/games/{id}/mail</td><td>{"title","body","recipients","rewards"?,"expires_in"?}</td></tr>
+            <tr><td>GET /admin/api/games/{id}/mail</td><td>邮件列表 + 领取率统计</td></tr>
+          </table></div>
+        </div>
+        <div class="oos">暂不做：玩家互发邮件；邮件附件携带道具（道具系统未建）</div>
+      </div>
+    </div>
+
+    <!-- F6 留存统计 -->
+    <div class="feature" id="p3-retention">
+      <div class="feature-head">
+        <div class="feature-accent p3"></div>
+        <div class="feature-meta">
+          <div class="feature-name">留存率与漏斗统计</div>
+          <div class="feature-desc">在现有 DAU / 登录 / 新增基础上补充 D1/D7/D30 留存率和注册漏斗，帮助开发者判断内容质量和回访能力。无需客户端接入，全部基于已有登录数据计算。</div>
+          <div class="feature-chips">
+            <span class="chip chip-pri-m">优先级：中</span>
+            <span class="chip chip-effort">工期 ~1.5 周</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-body">
+        <div>
+          <div class="section-label">核心需求</div>
+          <ul class="req-list">
+            <li>D1 / D7 / D30 留存率：以注册日为基准，次日 / 第 7 日 / 第 30 日回访比例</li>
+            <li>注册漏斗：注册量 → 首次登录 → 7 天内再次登录</li>
+            <li>统计接口新增 <code>?metric=retention</code> 参数；控制台「统计」页新增留存折线图</li>
+            <li>计算任务每日凌晨跑一次（延用现有 stats worker），结果写 Postgres 日表</li>
+          </ul>
+        </div>
+        <div>
+          <div class="section-label">API 接口</div>
+          <div class="table-wrap"><table class="api-table">
+            <tr><td>GET /admin/api/games/{id}/stats/retention</td><td>?days=30 D1/D7/D30 留存率时序</td></tr>
+            <tr><td>GET /admin/api/games/{id}/stats/funnel</td><td>?days=30 注册漏斗数据</td></tr>
+          </table></div>
+        </div>
+        <div class="oos">暂不做：自定义事件漏斗；付费转化漏斗</div>
+      </div>
+    </div>
+
+    <!-- F7 玩家管理增强 -->
+    <div class="feature" id="p3-ban">
+      <div class="feature-head">
+        <div class="feature-accent p3"></div>
+        <div class="feature-meta">
+          <div class="feature-name">玩家管理增强（封禁）</div>
+          <div class="feature-desc">控制台封禁 / 解禁玩家，封禁后已签发的 JWT 立即失效，封禁期内登录请求被拒绝。现有管理页仅能查看玩家数据，缺少处置能力。</div>
+          <div class="feature-chips">
+            <span class="chip chip-pri-m">优先级：中</span>
+            <span class="chip chip-effort">工期 ~1 周</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-body">
+        <div>
+          <div class="section-label">核心需求</div>
+          <ul class="req-list">
+            <li>封禁字段：原因（必填）、时长（永久 / 固定时长）、操作者</li>
+            <li>封禁立即生效：黑名单写 Redis（TTL = 封禁时长），鉴权中间件复查</li>
+            <li>封禁玩家登录时返回 <code>403 player_banned</code>，附带解封时间和原因</li>
+            <li>控制台封禁记录列表，支持解禁操作</li>
+            <li>封禁 / 解禁触发 WebHook 事件 <code>player.banned</code> / <code>player.unbanned</code></li>
+          </ul>
+        </div>
+        <div>
+          <div class="section-label">API 接口</div>
+          <div class="table-wrap"><table class="api-table">
+            <tr><td>POST /admin/api/players/{pid}/ban</td><td>{"reason","duration_secs"?} 封禁（0=永久）</td></tr>
+            <tr><td>POST /admin/api/players/{pid}/unban</td><td>解封</td></tr>
+            <tr><td>GET /admin/api/games/{id}/bans</td><td>封禁记录列表</td></tr>
+          </table></div>
+        </div>
+        <div class="oos">暂不做：按 IP 封禁（IP 变化快，误伤率高，不建议）；申诉流程</div>
+      </div>
+    </div>
+  </div><!-- /phase-section p3 -->
+
+  <!-- ════════════════ PHASE 4 ════════════════ -->
+  <div class="phase-section">
+    <div class="phase-header p4">
+      <span class="phase-eyebrow p4">Phase 4</span>
+      <span class="phase-title">平台扩展</span>
+      <span class="phase-timeline">预计工期 10–12 周</span>
+    </div>
+
+    <!-- F8 SDK -->
+    <div class="feature" id="p4-sdk">
+      <div class="feature-head">
+        <div class="feature-accent p4"></div>
+        <div class="feature-meta">
+          <div class="feature-name">官方 JavaScript / TypeScript SDK</div>
+          <div class="feature-desc">封装全部玩家 API 和 WebSocket，提供类型安全的接口，浏览器与 Node.js 双环境支持，发布到 npm。降低接入成本是扩大用户群的关键杠杆。</div>
+          <div class="feature-chips">
+            <span class="chip chip-pri-h">优先级：高</span>
+            <span class="chip chip-effort">工期 ~4 周</span>
+            <span class="chip chip-new">独立仓库</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-body">
+        <div>
+          <div class="section-label">核心需求</div>
+          <ul class="req-list">
+            <li>完整覆盖：认证、存档、排行榜、成就、好友、货币、邮件、公告、云函数调用</li>
+            <li>WebSocket 客户端：自动重连（指数退避）、心跳维持、事件订阅 API</li>
+            <li>TypeScript 类型定义内置，零额外依赖</li>
+            <li>ESM + CJS 双格式打包；浏览器直接 <code>&lt;script type="module"&gt;</code> 引入</li>
+            <li>README 快速上手示例 + API 文档站</li>
+          </ul>
+        </div>
+        <div>
+          <div class="section-label">示例用法</div>
+          <div class="table-wrap" style="padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text-sub)">
+            <span style="color:var(--accent)">const</span> mc = <span style="color:var(--accent)">new</span> MiniCloud({ appId: <span style="color:var(--p3)">"mc_xxx"</span>, baseUrl: <span style="color:var(--p3)">"https://api.example.com"</span> });<br>
+            <span style="color:var(--accent)">await</span> mc.auth.loginAsGuest({ deviceId });<br>
+            <span style="color:var(--accent)">await</span> mc.playerData.set(<span style="color:var(--p3)">"save1"</span>, { level: 3 });<br>
+            mc.realtime.on(<span style="color:var(--p3)">"room.state"</span>, ({ playerId, state }) => updatePlayer(playerId, state));
+          </div>
+        </div>
+        <div class="oos">暂不做：Unity / Godot SDK（优先 JS 验证接口设计后再扩展）</div>
+      </div>
+    </div>
+
+    <!-- F9 游戏级 KV API -->
+    <div class="feature" id="p4-kv">
+      <div class="feature-head">
+        <div class="feature-accent p4"></div>
+        <div class="feature-meta">
+          <div class="feature-name">游戏级 KV REST API</div>
+          <div class="feature-desc"><code>mc.kv</code> 目前仅在云函数内可用。将其暴露为独立 REST 接口后，游戏服务端可直接读写游戏级配置（如活动开关、全局排名门槛），而无需通过云函数中转。</div>
+          <div class="feature-chips">
+            <span class="chip chip-pri-m">优先级：中</span>
+            <span class="chip chip-effort">工期 ~1 周</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-body">
+        <div>
+          <div class="section-label">核心需求</div>
+          <ul class="req-list">
+            <li>命名空间隔离：每款游戏独立，key 格式 <code>{namespace}/{key}</code></li>
+            <li>读权限：玩家令牌可读公开命名空间；写权限：仅服务端（app_secret 签名）</li>
+            <li>值上限 64 KB；可选 TTL（到期自动删除）</li>
+            <li>列出命名空间下所有 key（分页）</li>
+          </ul>
+        </div>
+        <div>
+          <div class="section-label">API 接口</div>
+          <div class="table-wrap"><table class="api-table">
+            <tr><td>GET /v1/kv/{namespace}/{key}</td><td>读取（玩家令牌）</td></tr>
+            <tr><td>PUT /v1/kv/{namespace}/{key}</td><td>写入（app_secret，body = 任意 JSON）</td></tr>
+            <tr><td>DELETE /v1/kv/{namespace}/{key}</td><td>删除（app_secret）</td></tr>
+            <tr><td>GET /v1/kv/{namespace}</td><td>列出 key（玩家令牌，分页）</td></tr>
+          </table></div>
+        </div>
+        <div class="oos">暂不做：条件写（compare-and-swap）；跨游戏共享命名空间</div>
+      </div>
+    </div>
+
+    <!-- F10 WS 水平扩展 -->
+    <div class="feature" id="p4-ws">
+      <div class="feature-head">
+        <div class="feature-accent p4"></div>
+        <div class="feature-meta">
+          <div class="feature-name">WebSocket 水平扩展</div>
+          <div class="feature-desc">当前房间状态存在单实例内存，多实例部署时同一房间的玩家必须连同一实例。通过 Redis Pub/Sub 做跨实例消息分发，解除这一约束，对外接口零变更。</div>
+          <div class="feature-chips">
+            <span class="chip chip-pri-l">优先级：低（单实例够用时可推迟）</span>
+            <span class="chip chip-effort">工期 ~3 周</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-body">
+        <div>
+          <div class="section-label">核心需求</div>
+          <ul class="req-list">
+            <li>房间元数据写 Redis（成员列表、房主、meta），从内存移除</li>
+            <li>消息广播走 Redis Pub/Sub channel <code>room:{room_id}</code>；每个实例订阅并转发给本地连接</li>
+            <li>同一玩家新连接顶掉旧连接时需跨实例通知（Pub/Sub 发 kick 事件）</li>
+            <li>Redis 断连时优雅降级：停止接受新 WS 连接，已有连接维持（本地广播继续，跨实例不保证）</li>
+            <li>对外 API / WS 消息格式零变更，客户端无感</li>
+          </ul>
+        </div>
+        <div class="oos">暂不做：WebRTC 信令中继；房间持久化（服务重启房间消失属预期）</div>
+      </div>
+    </div>
+
+    <!-- F11 数据导出 -->
+    <div class="feature" id="p4-export">
+      <div class="feature-head">
+        <div class="feature-accent p4"></div>
+        <div class="feature-meta">
+          <div class="feature-name">数据导出</div>
+          <div class="feature-desc">控制台触发玩家数据异步导出，生成 JSON / CSV 文件后提供下载链接。满足 GDPR 等法规的数据可携带（data portability）要求，也便于开发者做离线分析。</div>
+          <div class="feature-chips">
+            <span class="chip chip-pri-l">优先级：低</span>
+            <span class="chip chip-effort">工期 ~2 周</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-body">
+        <div>
+          <div class="section-label">核心需求</div>
+          <ul class="req-list">
+            <li>导出范围：全部玩家 / 单个玩家；导出内容：档案、存档、货币流水、成就</li>
+            <li>异步任务：提交后返回 <code>job_id</code>，轮询状态；完成后生成预签名下载 URL（24 小时有效）</li>
+            <li>格式：JSON（嵌套结构）或 CSV（扁平化，多表分 zip）</li>
+            <li>导出文件存在现有 storage driver（local / S3），复用上传签名逻辑</li>
+            <li>控制台可查看导出历史和下载链接</li>
+          </ul>
+        </div>
+        <div>
+          <div class="section-label">API 接口</div>
+          <div class="table-wrap"><table class="api-table">
+            <tr><td>POST /admin/api/games/{id}/exports</td><td>{"format","scope","player_id"?} 提交导出任务</td></tr>
+            <tr><td>GET /admin/api/exports/{job_id}</td><td>查询进度 + 下载 URL</td></tr>
+            <tr><td>GET /admin/api/games/{id}/exports</td><td>导出历史列表</td></tr>
+          </table></div>
+        </div>
+        <div class="oos">暂不做：实时流式导出；玩家自助下载（需做独立授权页）</div>
+      </div>
+    </div>
+  </div><!-- /phase-section p4 -->
+
+  <!-- 依赖与排期汇总 -->
+  <div class="phase-section" style="margin-top:56px">
+    <div style="font-size:18px;font-weight:700;letter-spacing:-.01em;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:24px">依赖关系与排期汇总</div>
+    <div class="table-wrap"><table class="api-table" style="font-size:13px">
+      <tr style="background:var(--surface-2)">
+        <td style="font-weight:700;color:var(--text)">功能</td>
+        <td style="font-weight:700;color:var(--text)">Phase</td>
+        <td style="font-weight:700;color:var(--text)">前置依赖</td>
+        <td style="font-weight:700;color:var(--text)">新迁移文件</td>
+        <td style="font-weight:700;color:var(--text)">估算工期</td>
+      </tr>
+      <tr><td>好友系统</td><td style="color:var(--p2)">P2</td><td>无</td><td>0009_friends.sql</td><td>3 周</td></tr>
+      <tr><td>成就系统</td><td style="color:var(--p2)">P2</td><td>无</td><td>0010_achievements.sql</td><td>2 周</td></tr>
+      <tr><td>服务器公告</td><td style="color:var(--p2)">P2</td><td>无</td><td>0011_announcements.sql</td><td>1 周</td></tr>
+      <tr><td>虚拟货币</td><td style="color:var(--p3)">P3</td><td>无（邮件奖励依赖它）</td><td>0012_currency.sql</td><td>3 周</td></tr>
+      <tr><td>游戏内邮件</td><td style="color:var(--p3)">P3</td><td>虚拟货币</td><td>0013_mailbox.sql</td><td>2 周</td></tr>
+      <tr><td>留存统计</td><td style="color:var(--p3)">P3</td><td>无（复用 stats 表）</td><td>0014_retention.sql</td><td>1.5 周</td></tr>
+      <tr><td>玩家封禁</td><td style="color:var(--p3)">P3</td><td>无</td><td>0015_bans.sql</td><td>1 周</td></tr>
+      <tr><td>JS/TS SDK</td><td style="color:var(--p4)">P4</td><td>P2+P3 接口稳定</td><td>—（独立仓库）</td><td>4 周</td></tr>
+      <tr><td>游戏级 KV API</td><td style="color:var(--p4)">P4</td><td>无（mc.kv 已有实现）</td><td>—（无需迁移）</td><td>1 周</td></tr>
+      <tr><td>WS 水平扩展</td><td style="color:var(--p4)">P4</td><td>Redis 已有</td><td>—（无需迁移）</td><td>3 周</td></tr>
+      <tr><td>数据导出</td><td style="color:var(--p4)">P4</td><td>storage driver 已有</td><td>0016_exports.sql</td><td>2 周</td></tr>
+    </table></div>
+
+    <div style="margin-top:20px;padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:13px;line-height:1.8;color:var(--text-sub)">
+      <strong style="color:var(--text)">总工期估算：</strong>P2 约 6 周（可并行压缩到 4 周）&ensp;·&ensp;P3 约 7.5 周（可并行压缩到 4 周）&ensp;·&ensp;P4 约 10 周（可并行压缩到 5 周）<br>
+      <strong style="color:var(--text)">建议策略：</strong>P2 的三个功能互相独立，可三条线并行开发；P3 先做虚拟货币，再做邮件；P4 的 SDK 在 P2+P3 接口完成后启动。
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+// 激活当前锚点的侧边栏链接
+const links = document.querySelectorAll('.nav-sub');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const active = document.querySelector(`.nav-sub[href="#${e.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+document.querySelectorAll('.feature[id]').forEach(el => observer.observe(el));
+</script>
+<style>
+.nav-sub.active { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+code { font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border); }
+</style>

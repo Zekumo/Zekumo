@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0060a4">
+<title>MiniCloud 控制台</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230060a4'/%3E%3Cpath d='M8 22V10h3.4l4.6 7 4.6-7H24v12h-3v-7l-4 6h-1.2l-4-6v7z' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="layout.css">
+<link rel="stylesheet" href="account.css">
+<link rel="stylesheet" href="charts.css">
+</head>
+<body>
+
+<!-- login ---------------------------------------------------------------->
+<div id="loginView" class="login-shell hidden">
+  <div class="login-card">
+    <div class="login-brand"><b>MiniCloud</b></div>
+    <p class="login-sub">小游戏后端控制台</p>
+    <label class="field">
+      <input id="loginUser" placeholder=" " value="admin" autocomplete="username">
+      <span class="label">用户名</span>
+    </label>
+    <label class="field">
+      <input id="loginPass" type="password" placeholder=" " autocomplete="current-password">
+      <span class="label">密码</span>
+    </label>
+    <button class="btn filled block" onclick="login()">登录</button>
+  </div>
+</div>
+
+<!-- app ------------------------------------------------------------------>
+<div id="appView" class="hidden">
+  <header class="top-app-bar">
+    <button class="icon-btn nav-toggle" onclick="toggleNav()" aria-label="菜单">
+      <svg viewBox="0 0 24 24"><path d="M3 6h18v2H3V6Zm0 5h18v2H3v-2Zm0 5h18v2H3v-2Z"/></svg>
+    </button>
+    <span class="brand"><b>MiniCloud</b></span>
+    <div id="gameSwitcher" class="switcher"></div>
+    <span class="grow"></span>
+    <button id="themeBtn" class="icon-btn" title="切换主题" aria-label="切换主题">
+      <svg viewBox="0 0 24 24"><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12Zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-1-14h2v3h-2V2Zm0 17h2v3h-2v-3ZM2 11h3v2H2v-2Zm17 0h3v2h-3v-2ZM4.9 3.5 7 5.6 5.6 7 3.5 4.9 4.9 3.5Zm12.7 12.7 2.1 2.1-1.4 1.4-2.1-2.1 1.4-1.4Zm1.4-12.7 1.4 1.4L18.3 7l-1.4-1.4 2.1-2.1ZM5.6 17.6 7 19l-2.1 2.1-1.4-1.4 2.1-2.1Z"/></svg>
+    </button>
+    <div class="account">
+      <button id="accountBtn" class="account-btn" onclick="toggleAccountMenu(event)" aria-haspopup="menu">
+        <span class="avatar" id="avatar"></span>
+        <span class="account-name" id="accountName"></span>
+      </button>
+      <div id="accountMenu" class="menu hidden" role="menu"></div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <nav id="navRail" class="nav-rail"></nav>
+    <main id="page" class="page"></main>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="scrim" class="scrim hidden" onclick="closeDialog()"></div>
+<div id="dialogHost"></div>
+
+<script src="core.js"></script>
+<script src="nav.js"></script>
+<script src="account.js"></script>
+<script src="charts.js"></script>
+<script src="page-dashboard.js"></script>
+<script src="page-platform.js"></script>
+<script src="page-overview.js"></script>
+<script src="page-players.js"></script>
+<script src="page-leaderboards.js"></script>
+<script src="page-content.js"></script>
+<script src="page-releases.js"></script>
+<script src="page-functions.js"></script>
+<script src="page-webhooks.js"></script>
+<script src="page-achievements.js"></script>
+<script src="page-announcements.js"></script>
+<script src="page-currency.js"></script>
+<script src="page-mail.js"></script>
+<script src="page-bans.js"></script>
+<script src="page-exports.js"></script>
+<script src="page-logs.js"></script>
+<script src="page-settings.js"></script>
+<script src="boot.js"></script>
+</body>
+</html>

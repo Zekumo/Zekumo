@@ -1,0 +1,11 @@
+*.exe
+/minicloud
+/server
+.env
+*.log
+*.err
+/backups/
+deploy/.env
+sdk/node_modules/
+sdk/dist/
+sdk/package-lock.json

@@ -1,0 +1,1752 @@
+diff -ruN artifacts/prd-p2-20260906/pristine-final/README.md artifacts/prd-p2-20260906/current-final/README.md
+--- artifacts/prd-p2-20260906/pristine-final/README.md	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/README.md	2026-09-06 10:38:02.000000000 +0800
+@@ -127,6 +127,8 @@
+ 
+ - **游戏(Game)**:租户单位。控制台创建后获得 `app_id`(可放进客户端)和
+   `app_secret`(保密,留给将来服务器对服务器接口用)。所有数据按游戏隔离。
++  好友数上限可在控制台「设置」中调整(默认 200)，也可调用
++  `PUT /admin/api/games/{id}/friend-limit` 设置为 1–10000。
+ - **玩家(Player)**:属于某个游戏。登录方式可插拔,当前内置:
+   - `guest`:设备号登录,首次即注册;
+   - `password`:账号密码(先 `/v1/auth/register`)。
+@@ -165,10 +167,24 @@
+ 
+ ```
+ POST /v1/leaderboards/{board}/score       {"score": 300, "mode": "max"|"incr"|"replace"}
+-GET  /v1/leaderboards/{board}?offset=&limit=   TopN(带昵称)
++GET  /v1/leaderboards/{board}?offset=&limit=&scope=friends   TopN(带昵称; scope=friends 仅好友范围)
+ GET  /v1/leaderboards/{board}/me          我的排名
+ ```
+ 
++### 好友与成就
++
++```
++POST /v1/friends/request       {"target_player_id"} 发起请求
++POST /v1/friends/accept        {"request_id"} 接受请求
++POST /v1/friends/decline      {"request_id"} 拒绝或撤回
++GET  /v1/friends               好友列表(含在线状态)
++GET  /v1/friends/requests      待处理请求
++DELETE /v1/friends/{player_id} 删除好友
++POST /v1/friends/block         {"target_player_id"} 屏蔽
++GET  /v1/achievements          全部成就及当前进度
++GET  /v1/achievements/unlocked 已解锁成就
++```
++
+ ### 剧情对话(控制台编辑,客户端只读)
+ 
+ ```
+@@ -182,6 +198,17 @@
+ GET /v1/chat/history?channel=world&before_id=&limit=    翻页拉历史(最新在前)
+ ```
+ 
++### 服务器公告
++
++客户端无需登录即可轮询公告；空的 `platform` / `channel` 表示全服。
++
++```
++GET /v1/apps/{app_id}/announcements?after_id=&platform=&channel=
++POST /admin/api/games/{id}/announcements
++PUT  /admin/api/announcements/{aid}
++DELETE /admin/api/announcements/{aid}                   下架(软删除)
++```
++
+ ### 检查更新(无需令牌 —— 更新器在登录之前运行)
+ 
+ ```
+@@ -306,7 +333,7 @@
+ 
+ 控制台按游戏配置接收地址,平台事件实时 POST 过去(失败重试 3 次,间隔 1s/5s):
+ 
+-- 事件:`player.registered`、`player.login`、`leaderboard.score`、`release.published`
++- 事件:`player.registered`、`player.login`、`player.banned`、`player.unbanned`、`leaderboard.score`、`achievement.unlocked`、`release.published`
+   (可订阅子集,`*` 表示全部)
+ - 请求体:`{event, game_id, timestamp, data}`;头部 `X-MiniCloud-Event` 和
+   `X-MiniCloud-Signature: sha256=<HMAC-SHA256(secret, body)>`,**收到后必须验签**
+diff -ruN artifacts/prd-p2-20260906/pristine-final/cmd/smoketest/phase_achievements.go artifacts/prd-p2-20260906/current-final/cmd/smoketest/phase_achievements.go
+--- artifacts/prd-p2-20260906/pristine-final/cmd/smoketest/phase_achievements.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/cmd/smoketest/phase_achievements.go	2026-09-06 10:08:49.000000000 +0800
+@@ -129,6 +129,10 @@
+ 	step("two achievements unlocked", boolErr(len(completedList.Unlocked) == 2,
+ 		"expected 2 unlocked, got %d", len(completedList.Unlocked)))
+ 
++	// Definitions with an unlocked player are retained so the unlock history
++	// cannot disappear accidentally from an operator delete.
++	step("cannot delete unlocked achievement", expectErr(call("DELETE", "/admin/api/achievements/"+achInstant.ID, s.adminToken, nil, nil)))
++
+ 	// Bob has no unlocks — list should be empty array, not null.
+ 	var bobUnlocked struct {
+ 		Unlocked []any `json:"unlocked"`
+diff -ruN artifacts/prd-p2-20260906/pristine-final/cmd/smoketest/phase_announcements.go artifacts/prd-p2-20260906/current-final/cmd/smoketest/phase_announcements.go
+--- artifacts/prd-p2-20260906/pristine-final/cmd/smoketest/phase_announcements.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/cmd/smoketest/phase_announcements.go	2026-09-06 10:09:02.000000000 +0800
+@@ -106,4 +106,22 @@
+ 	// Deactivate non-existent ID should 404.
+ 	step("deactivate unknown id returns 404", expectErr(call("DELETE",
+ 		"/admin/api/announcements/00000000-0000-0000-0000-000000000000", s.adminToken, nil, nil)))
++
++	// Targeted notices are only returned to matching platform/channel clients.
++	var targeted struct {
++		ID string `json:"id"`
++	}
++	step("create targeted announcement", call("POST", "/admin/api/games/"+s.gameID+"/announcements", s.adminToken,
++		map[string]any{"title": "Windows 活动", "platform": "windows", "channel": "beta"}, &targeted))
++	var filtered struct {
++		Announcements []struct{ ID string } `json:"announcements"`
++	}
++	step("targeted announcement hidden from other platform", call("GET", "/v1/apps/"+s.appID+"/announcements?platform=web&channel=stable", "", nil, &filtered))
++	var foundTarget bool
++	for _, a := range filtered.Announcements {
++		if a.ID == targeted.ID {
++			foundTarget = true
++		}
++	}
++	step("targeted announcement not returned", boolErr(!foundTarget, "targeted notice leaked to non-matching client"))
+ }
+diff -ruN artifacts/prd-p2-20260906/pristine-final/cmd/smoketest/phase_friends.go artifacts/prd-p2-20260906/current-final/cmd/smoketest/phase_friends.go
+--- artifacts/prd-p2-20260906/pristine-final/cmd/smoketest/phase_friends.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/cmd/smoketest/phase_friends.go	2026-09-06 10:11:00.000000000 +0800
+@@ -57,6 +57,19 @@
+ 
+ 	// Bob's friend list contains Alice.
+ 	step("bob friend list", call("GET", "/v1/friends", s.bob.Token, nil, nil))
++	var friendBoard struct {
++		Entries []struct {
++			PlayerID string `json:"player_id"`
++		} `json:"entries"`
++	}
++	step("friends leaderboard scope", call("GET", "/v1/leaderboards/weekly?scope=friends", s.alice.Token, nil, &friendBoard))
++	var leaked bool
++	for _, entry := range friendBoard.Entries {
++		if entry.PlayerID != s.alice.Player.ID && entry.PlayerID != s.bob.Player.ID {
++			leaked = true
++		}
++	}
++	step("friends leaderboard contains no outsiders", boolErr(!leaked, "friends scope returned an unrelated player"))
+ 
+ 	// Pending requests list should now be empty for both.
+ 	var aliceReqs struct {
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/achievements/achievements.go artifacts/prd-p2-20260906/current-final/internal/achievements/achievements.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/achievements/achievements.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/achievements/achievements.go	2026-09-06 10:30:49.000000000 +0800
+@@ -5,6 +5,7 @@
+ import (
+ 	"errors"
+ 	"net/http"
++	"strings"
+ 
+ 	"minicloud/internal/auth"
+ 	"minicloud/internal/httpx"
+@@ -31,9 +32,9 @@
+ // achievementWithStatus combines a definition with the caller's unlock state.
+ type achievementWithStatus struct {
+ 	repo.AchievementDef
+-	Unlocked   bool  `json:"unlocked"`
+-	Progress   int   `json:"progress"`
+-	UnlockedAt *any  `json:"unlocked_at,omitempty"`
++	Unlocked   bool `json:"unlocked"`
++	Progress   int  `json:"progress"`
++	UnlockedAt *any `json:"unlocked_at,omitempty"`
+ }
+ 
+ // List handles GET /v1/achievements
+@@ -129,7 +130,9 @@
+ 
+ 	type unlockEntry struct {
+ 		repo.AchievementDef
+-		UnlockedAt any `json:"unlocked_at"`
++		Unlocked   bool `json:"unlocked"`
++		Progress   int  `json:"progress"`
++		UnlockedAt any  `json:"unlocked_at"`
+ 	}
+ 	out := make([]unlockEntry, 0, len(unlocks))
+ 	for _, u := range unlocks {
+@@ -137,7 +140,7 @@
+ 		if !ok {
+ 			continue
+ 		}
+-		out = append(out, unlockEntry{AchievementDef: d, UnlockedAt: u.UnlockedAt})
++		out = append(out, unlockEntry{AchievementDef: d, Unlocked: true, Progress: u.Progress, UnlockedAt: u.UnlockedAt})
+ 	}
+ 	httpx.JSON(w, http.StatusOK, map[string]any{"unlocked": out})
+ }
+@@ -166,8 +169,11 @@
+ 		httpx.Error(w, http.StatusBadRequest, "missing_field", "key and name are required")
+ 		return
+ 	}
+-	if body.Target < 1 {
+-		body.Target = 1
++	body.Key = strings.TrimSpace(body.Key)
++	body.Name = strings.TrimSpace(body.Name)
++	if body.Key == "" || body.Name == "" {
++		httpx.Error(w, http.StatusBadRequest, "missing_field", "key and name are required")
++		return
+ 	}
+ 	if body.Rarity == "" {
+ 		body.Rarity = "common"
+@@ -175,6 +181,10 @@
+ 	if body.Type == "" {
+ 		body.Type = "instant"
+ 	}
++	if err := validateDefinition(&body); err != nil {
++		httpx.Error(w, http.StatusBadRequest, "invalid_definition", err.Error())
++		return
++	}
+ 	def, err := h.Svc.Defs.Create(r.Context(), gameID, body)
+ 	if err != nil {
+ 		if repo.IsUniqueViolation(err) {
+@@ -194,6 +204,10 @@
+ 	if httpx.Decode(w, r, &body) != nil {
+ 		return
+ 	}
++	if err := validateDefinition(&body); err != nil {
++		httpx.Error(w, http.StatusBadRequest, "invalid_definition", err.Error())
++		return
++	}
+ 	def, err := h.Svc.Defs.Update(r.Context(), id, body)
+ 	if err != nil {
+ 		if errors.Is(err, repo.ErrNotFound) {
+@@ -209,6 +223,10 @@
+ // AdminDelete handles DELETE /admin/api/achievements/{aid}
+ func (h *Handler) AdminDelete(w http.ResponseWriter, r *http.Request) {
+ 	if err := h.Svc.Defs.Delete(r.Context(), r.PathValue("aid")); err != nil {
++		if errors.Is(err, repo.ErrAchievementUnlocked) {
++			httpx.Error(w, http.StatusConflict, "achievement_unlocked", "an achievement with unlocks cannot be deleted")
++			return
++		}
+ 		if errors.Is(err, repo.ErrNotFound) {
+ 			httpx.Error(w, http.StatusNotFound, "not_found", "achievement not found")
+ 			return
+@@ -235,6 +253,10 @@
+ 		httpx.Error(w, http.StatusBadRequest, "missing_field", "player_id is required")
+ 		return
+ 	}
++	if body.Progress != nil && *body.Progress < 0 {
++		httpx.Error(w, http.StatusBadRequest, "bad_progress", "progress must be >= 0")
++		return
++	}
+ 
+ 	// Fetch the definition to know the target.
+ 	def, err := h.Svc.Defs.ByID(r.Context(), achID)
+@@ -252,14 +274,18 @@
+ 		progress = *body.Progress
+ 	}
+ 
+-	unlock, err := h.Svc.Unlocks.Upsert(r.Context(), achID, body.PlayerID, progress)
++	unlock, newlyUnlocked, err := h.Svc.Unlocks.UpsertWithTransition(r.Context(), achID, body.PlayerID, progress)
+ 	if err != nil {
++		if errors.Is(err, repo.ErrNotFound) {
++			httpx.Error(w, http.StatusNotFound, "not_found", "achievement or player not found")
++			return
++		}
+ 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+ 		return
+ 	}
+ 
+ 	// Emit webhook event when the achievement is newly unlocked.
+-	if h.Events != nil && unlock.UnlockedAt != nil {
++	if h.Events != nil && newlyUnlocked {
+ 		h.Events.Emit(def.GameID, "achievement.unlocked", map[string]any{
+ 			"achievement_id":  achID,
+ 			"achievement_key": def.Key,
+@@ -269,3 +295,34 @@
+ 	}
+ 	httpx.JSON(w, http.StatusOK, unlock)
+ }
++
++func validateDefinition(d *repo.AchievementDef) error {
++	if d.Name == "" {
++		return errors.New("name is required")
++	}
++	if d.Rarity == "" {
++		d.Rarity = "common"
++	}
++	switch d.Rarity {
++	case "common", "rare", "epic", "legendary":
++	default:
++		return errors.New("rarity must be common, rare, epic or legendary")
++	}
++	if d.Type == "" {
++		d.Type = "instant"
++	}
++	switch d.Type {
++	case "instant":
++		d.Target = 1
++	case "progress":
++		if d.Target < 1 {
++			return errors.New("progress achievements require target >= 1")
++		}
++	default:
++		return errors.New("type must be instant or progress")
++	}
++	if d.Target < 1 {
++		return errors.New("target must be >= 1")
++	}
++	return nil
++}
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/admin/handler.go artifacts/prd-p2-20260906/current-final/internal/admin/handler.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/admin/handler.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/admin/handler.go	2026-09-06 10:06:07.000000000 +0800
+@@ -16,9 +16,9 @@
+ // Handler exposes the developer console API: manage games, inspect players,
+ // author dialogue scripts. Auth is a single operator account from config.
+ type Handler struct {
+-	Issuer    *auth.TokenIssuer
+-	User      string
+-	Pass      string
++	Issuer       *auth.TokenIssuer
++	User         string
++	Pass         string
+ 	Games        repo.Games
+ 	Players      repo.Players
+ 	Accounts     repo.Accounts
+@@ -234,6 +234,28 @@
+ 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+ 		return
+ 	}
++	httpx.JSON(w, http.StatusOK, map[string]bool{"updated": true})
++}
++
++// UpdateGameFriendLimit handles PUT /admin/api/games/{id}/friend-limit.
++func (h *Handler) UpdateGameFriendLimit(w http.ResponseWriter, r *http.Request) {
++	var req struct {
++		Limit int `json:"limit"`
++	}
++	if httpx.Decode(w, r, &req) != nil {
++		return
++	}
++	if req.Limit < 1 || req.Limit > 10000 {
++		httpx.Error(w, http.StatusBadRequest, "bad_limit", "limit must be between 1 and 10000")
++		return
++	}
++	if err := h.Games.UpdateFriendLimit(r.Context(), r.PathValue("id"), req.Limit); errors.Is(err, repo.ErrNotFound) {
++		httpx.Error(w, http.StatusNotFound, "not_found", "no game with this id")
++		return
++	} else if err != nil {
++		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
++		return
++	}
+ 	httpx.JSON(w, http.StatusOK, map[string]bool{"updated": true})
+ }
+ 
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/announcements/announcements.go artifacts/prd-p2-20260906/current-final/internal/announcements/announcements.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/announcements/announcements.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/announcements/announcements.go	2026-09-06 10:30:02.000000000 +0800
+@@ -5,6 +5,7 @@
+ import (
+ 	"errors"
+ 	"net/http"
++	"strings"
+ 	"time"
+ 
+ 	"minicloud/internal/httpx"
+@@ -22,8 +23,10 @@
+ func (h *Handler) PublicList(w http.ResponseWriter, r *http.Request) {
+ 	appID := r.PathValue("app_id")
+ 	afterID := r.URL.Query().Get("after_id")
++	platform := strings.TrimSpace(r.URL.Query().Get("platform"))
++	channel := strings.TrimSpace(r.URL.Query().Get("channel"))
+ 
+-	anns, err := h.Repo.PublicListByAppID(r.Context(), appID, afterID, 50)
++	anns, err := h.Repo.PublicListByAppIDFiltered(r.Context(), appID, afterID, platform, channel, 50)
+ 	if err != nil {
+ 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+ 		return
+@@ -51,31 +54,48 @@
+ func (h *Handler) AdminCreate(w http.ResponseWriter, r *http.Request) {
+ 	gameID := r.PathValue("id")
+ 	var body struct {
+-		Title      string `json:"title"`
+-		Body       string `json:"body"`
+-		Importance string `json:"importance"`
+-		Platform   string `json:"platform"`
+-		ExpiresIn  *int   `json:"expires_in_secs"`
++		Title      string     `json:"title"`
++		Body       string     `json:"body"`
++		Importance string     `json:"importance"`
++		Platform   string     `json:"platform"`
++		Channel    string     `json:"channel"`
++		ExpiresIn  *int       `json:"expires_in_secs"`
++		ExpiresAt  *time.Time `json:"expires_at"`
+ 	}
+ 	if httpx.Decode(w, r, &body) != nil {
+ 		return
+ 	}
+-	if body.Title == "" {
++	if strings.TrimSpace(body.Title) == "" {
+ 		httpx.Error(w, http.StatusBadRequest, "missing_field", "title is required")
+ 		return
+ 	}
++	if body.ExpiresIn != nil && *body.ExpiresIn < 0 {
++		httpx.Error(w, http.StatusBadRequest, "bad_expiry", "expires_in_secs must be >= 0")
++		return
++	}
++	if body.ExpiresAt != nil && !body.ExpiresAt.After(time.Now()) {
++		httpx.Error(w, http.StatusBadRequest, "bad_expiry", "expires_at must be in the future")
++		return
++	}
+ 	if body.Importance == "" {
+ 		body.Importance = "info"
+ 	}
++	if !validImportance(body.Importance) {
++		httpx.Error(w, http.StatusBadRequest, "bad_importance", "importance must be info, warning or critical")
++		return
++	}
+ 
+ 	a := repo.Announcement{
+ 		GameID:     gameID,
+-		Title:      body.Title,
++		Title:      strings.TrimSpace(body.Title),
+ 		Body:       body.Body,
+ 		Importance: body.Importance,
+-		Platform:   body.Platform,
++		Platform:   strings.TrimSpace(body.Platform),
++		Channel:    strings.TrimSpace(body.Channel),
+ 	}
+-	if body.ExpiresIn != nil {
++	if body.ExpiresAt != nil {
++		a.ExpiresAt = body.ExpiresAt
++	} else if body.ExpiresIn != nil && *body.ExpiresIn > 0 {
+ 		t := time.Now().Add(time.Duration(*body.ExpiresIn) * time.Second)
+ 		a.ExpiresAt = &t
+ 	}
+@@ -92,27 +112,71 @@
+ func (h *Handler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
+ 	id := r.PathValue("aid")
+ 	var body struct {
+-		Title      string `json:"title"`
+-		Body       string `json:"body"`
+-		Importance string `json:"importance"`
+-		Platform   string `json:"platform"`
+-		ExpiresIn  *int   `json:"expires_in_secs"`
++		Title        string     `json:"title"`
++		Body         string     `json:"body"`
++		Importance   string     `json:"importance"`
++		Platform     string     `json:"platform"`
++		Channel      string     `json:"channel"`
++		ExpiresIn    *int       `json:"expires_in_secs"`
++		ExpiresAt    *time.Time `json:"expires_at"`
++		ClearExpires bool       `json:"clear_expires"`
+ 	}
+ 	if httpx.Decode(w, r, &body) != nil {
+ 		return
+ 	}
++	if strings.TrimSpace(body.Title) == "" {
++		httpx.Error(w, http.StatusBadRequest, "missing_field", "title is required")
++		return
++	}
++	if body.ExpiresIn != nil && *body.ExpiresIn < 0 {
++		httpx.Error(w, http.StatusBadRequest, "bad_expiry", "expires_in_secs must be >= 0")
++		return
++	}
++	if body.ExpiresAt != nil && !body.ExpiresAt.After(time.Now()) {
++		httpx.Error(w, http.StatusBadRequest, "bad_expiry", "expires_at must be in the future")
++		return
++	}
+ 
++	if body.Importance != "" && !validImportance(body.Importance) {
++		httpx.Error(w, http.StatusBadRequest, "bad_importance", "importance must be info, warning or critical")
++		return
++	}
++	// PUT keeps the existing expiry when no expiry field is supplied. This
++	// prevents an ordinary text edit from silently turning a timed notice into
++	// a permanent one.
++	existing, err := h.Repo.ByID(r.Context(), id)
++	if err != nil {
++		if errors.Is(err, repo.ErrNotFound) {
++			httpx.Error(w, http.StatusNotFound, "not_found", "announcement not found")
++			return
++		}
++		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
++		return
++	}
++	importance := body.Importance
++	if importance == "" {
++		importance = existing.Importance
++	}
+ 	a := repo.Announcement{
+-		Title:      body.Title,
++		Title:      strings.TrimSpace(body.Title),
+ 		Body:       body.Body,
+-		Importance: body.Importance,
+-		Platform:   body.Platform,
+-	}
+-	if body.ExpiresIn != nil {
+-		t := time.Now().Add(time.Duration(*body.ExpiresIn) * time.Second)
+-		a.ExpiresAt = &t
++		Importance: importance,
++		Platform:   strings.TrimSpace(body.Platform),
++		Channel:    strings.TrimSpace(body.Channel),
++		ExpiresAt:  existing.ExpiresAt,
++	}
++	if body.ClearExpires {
++		a.ExpiresAt = nil
++	} else if body.ExpiresAt != nil {
++		a.ExpiresAt = body.ExpiresAt
++	} else if body.ExpiresIn != nil {
++		if *body.ExpiresIn <= 0 {
++			a.ExpiresAt = nil
++		} else {
++			t := time.Now().Add(time.Duration(*body.ExpiresIn) * time.Second)
++			a.ExpiresAt = &t
++		}
+ 	}
+-
+ 	ann, err := h.Repo.Update(r.Context(), id, a)
+ 	if err != nil {
+ 		if errors.Is(err, repo.ErrNotFound) {
+@@ -125,6 +189,10 @@
+ 	httpx.JSON(w, http.StatusOK, ann)
+ }
+ 
++func validImportance(v string) bool {
++	return v == "info" || v == "warning" || v == "critical"
++}
++
+ // AdminDeactivate handles DELETE /admin/api/announcements/{aid}
+ // Soft-delete: sets active=false so existing IDs remain stable.
+ func (h *Handler) AdminDeactivate(w http.ResponseWriter, r *http.Request) {
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/friends/friends.go artifacts/prd-p2-20260906/current-final/internal/friends/friends.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/friends/friends.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/friends/friends.go	2026-09-06 10:37:32.000000000 +0800
+@@ -3,6 +3,7 @@
+ package friends
+ 
+ import (
++	"context"
+ 	"errors"
+ 	"net/http"
+ 
+@@ -22,6 +23,7 @@
+ 	Friendships repo.Friendships
+ 	Blocks      repo.PlayerBlocks
+ 	Players     repo.Players
++	Games       repo.Games
+ }
+ 
+ // Handler exposes the friend API over HTTP.
+@@ -30,6 +32,22 @@
+ 	Hub OnlineChecker // may be nil in tests
+ }
+ 
++const maxFriends = 200
++
++func (s *Service) friendLimit(ctx context.Context, gameID string) (int, error) {
++	if s.Games.DB == nil {
++		return maxFriends, nil
++	}
++	g, err := s.Games.ByID(ctx, gameID)
++	if err != nil {
++		return 0, err
++	}
++	if g.FriendLimit < 1 {
++		return maxFriends, nil
++	}
++	return g.FriendLimit, nil
++}
++
+ // SendRequest handles POST /v1/friends/request
+ // Body: {"target_player_id": "..."}
+ func (h *Handler) SendRequest(w http.ResponseWriter, r *http.Request) {
+@@ -50,7 +68,8 @@
+ 	}
+ 
+ 	// Check target exists in this game.
+-	if _, err := h.Svc.Players.ByID(r.Context(), req.TargetPlayerID); err != nil {
++	target, err := h.Svc.Players.ByID(r.Context(), req.TargetPlayerID)
++	if err != nil {
+ 		if errors.Is(err, repo.ErrNotFound) {
+ 			httpx.Error(w, http.StatusNotFound, "player_not_found", "target player not found")
+ 			return
+@@ -58,6 +77,24 @@
+ 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+ 		return
+ 	}
++	if target.GameID != claims.GameID {
++		httpx.Error(w, http.StatusNotFound, "player_not_found", "target player not found")
++		return
++	}
++	count, err := h.Svc.Friendships.Count(r.Context(), claims.GameID, claims.Subject)
++	if err != nil {
++		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
++		return
++	}
++	limit, err := h.Svc.friendLimit(r.Context(), claims.GameID)
++	if err != nil {
++		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
++		return
++	}
++	if count >= limit {
++		httpx.Error(w, http.StatusConflict, "friend_limit", "friend limit reached")
++		return
++	}
+ 
+ 	// Refuse if either party has blocked the other.
+ 	blocked, err := h.Svc.Blocks.EitherBlocked(r.Context(), claims.GameID, claims.Subject, req.TargetPlayerID)
+@@ -118,10 +155,24 @@
+ 		return
+ 	}
+ 	// Only the recipient may accept.
+-	if fr.ToID != claims.Subject {
++	if fr.GameID != claims.GameID || fr.ToID != claims.Subject {
+ 		httpx.Error(w, http.StatusForbidden, "forbidden", "only the recipient can accept this request")
+ 		return
+ 	}
++	count, err := h.Svc.Friendships.Count(r.Context(), claims.GameID, claims.Subject)
++	if err != nil {
++		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
++		return
++	}
++	limit, err := h.Svc.friendLimit(r.Context(), claims.GameID)
++	if err != nil {
++		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
++		return
++	}
++	if count >= limit {
++		httpx.Error(w, http.StatusConflict, "friend_limit", "friend limit reached")
++		return
++	}
+ 
+ 	if err := h.Svc.Requests.Accept(r.Context(), fr.ID); err != nil {
+ 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+@@ -145,7 +196,7 @@
+ 	if httpx.Decode(w, r, &req) != nil {
+ 		return
+ 	}
+-	if err := h.Svc.Requests.Decline(r.Context(), req.RequestID, claims.Subject); err != nil {
++	if err := h.Svc.Requests.DeclineInGame(r.Context(), req.RequestID, claims.GameID, claims.Subject); err != nil {
+ 		if errors.Is(err, repo.ErrNotFound) {
+ 			httpx.Error(w, http.StatusNotFound, "request_not_found", "pending request not found")
+ 			return
+@@ -221,6 +272,19 @@
+ 		httpx.Error(w, http.StatusBadRequest, "bad_request", "invalid target_player_id")
+ 		return
+ 	}
++	target, err := h.Svc.Players.ByID(r.Context(), req.TargetPlayerID)
++	if err != nil {
++		if errors.Is(err, repo.ErrNotFound) {
++			httpx.Error(w, http.StatusNotFound, "player_not_found", "target player not found")
++			return
++		}
++		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
++		return
++	}
++	if target.GameID != claims.GameID {
++		httpx.Error(w, http.StatusNotFound, "player_not_found", "target player not found")
++		return
++	}
+ 	// Blocking ends any friendship and clears outstanding request history.
+ 	if err := h.Svc.Friendships.Remove(r.Context(), claims.GameID, claims.Subject, req.TargetPlayerID); err != nil {
+ 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/hooks/handler.go artifacts/prd-p2-20260906/current-final/internal/hooks/handler.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/hooks/handler.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/hooks/handler.go	2026-09-06 09:53:48.000000000 +0800
+@@ -14,7 +14,10 @@
+ 
+ // KnownEvents is documentation for the console; hooks may subscribe to any
+ // subset, or * for everything.
+-var KnownEvents = []string{"player.registered", "player.login", "leaderboard.score", "release.published"}
++var KnownEvents = []string{
++	"player.registered", "player.login", "player.banned", "player.unbanned",
++	"leaderboard.score", "achievement.unlocked", "release.published",
++}
+ 
+ type Handler struct {
+ 	Bus *Bus
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/leaderboard/leaderboard.go artifacts/prd-p2-20260906/current-final/internal/leaderboard/leaderboard.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/leaderboard/leaderboard.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/leaderboard/leaderboard.go	2026-09-06 10:01:24.000000000 +0800
+@@ -25,6 +25,73 @@
+ 	Players repo.Players
+ }
+ 
++// TopFriends returns a leaderboard limited to the caller and their accepted
++// friends. Redis keeps the global ordering; filtering the bounded friend set
++// preserves score/tie ordering without exposing unrelated players.
++func (s *Service) TopFriends(ctx context.Context, gameID, board, playerID string, offset, limit int64, friendships repo.Friendships) ([]Entry, error) {
++	if err := s.ensure(ctx, gameID, board); err != nil {
++		return nil, err
++	}
++	ids, err := friendships.IDs(ctx, gameID, playerID)
++	if err != nil {
++		return nil, err
++	}
++	allowed := make(map[string]struct{}, len(ids)+1)
++	allowed[playerID] = struct{}{}
++	for _, id := range ids {
++		allowed[id] = struct{}{}
++	}
++	zs, err := s.RDB.ZRevRangeWithScores(ctx, key(gameID, board), 0, -1).Result()
++	if err != nil {
++		return nil, err
++	}
++	all := make([]Entry, 0, len(allowed))
++	for _, z := range zs {
++		id, ok := z.Member.(string)
++		if !ok {
++			continue
++		}
++		if _, ok := allowed[id]; !ok {
++			continue
++		}
++		all = append(all, Entry{PlayerID: id, Score: int64(z.Score)})
++	}
++	if offset < 0 {
++		offset = 0
++	}
++	if limit <= 0 || limit > 100 {
++		limit = 50
++	}
++	start := minInt64(offset, int64(len(all)))
++	end := minInt64(start+limit, int64(len(all)))
++	page := all[start:end]
++	if len(page) == 0 {
++		return []Entry{}, nil
++	}
++	nicks, err := s.Players.Nicknames(ctx, func() []string {
++		out := make([]string, len(page))
++		for i := range page {
++			out[i] = page[i].PlayerID
++		}
++		return out
++	}())
++	if err != nil {
++		return nil, err
++	}
++	for i := range page {
++		page[i].Rank = start + int64(i) + 1
++		page[i].Nickname = nicks[page[i].PlayerID]
++	}
++	return page, nil
++}
++
++func minInt64(a, b int64) int64 {
++	if a < b {
++		return a
++	}
++	return b
++}
++
+ func key(gameID, board string) string { return "lb:" + gameID + ":" + board }
+ 
+ func (s *Service) ensure(ctx context.Context, gameID, board string) error {
+@@ -136,8 +203,9 @@
+ }
+ 
+ type Handler struct {
+-	Svc    *Service
+-	Events Emitter // optional webhook bus
++	Svc     *Service
++	Events  Emitter // optional webhook bus
++	Friends repo.Friendships
+ }
+ 
+ // Emitter publishes platform events; nil disables emission.
+@@ -177,12 +245,26 @@
+ func (h *Handler) Top(w http.ResponseWriter, r *http.Request) {
+ 	claims := auth.ClaimsFrom(r.Context())
+ 	board := r.PathValue("board")
++	if !boardName.MatchString(board) {
++		httpx.Error(w, http.StatusBadRequest, "bad_board", "board name must match [a-zA-Z0-9_.-]{1,64}")
++		return
++	}
+ 	offset, _ := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 64)
+ 	limit, _ := strconv.ParseInt(r.URL.Query().Get("limit"), 10, 64)
+ 	if limit <= 0 || limit > 100 {
+ 		limit = 50
+ 	}
+-	entries, err := h.Svc.Top(r.Context(), claims.GameID, board, max(offset, 0), limit)
++	offset = max(offset, 0)
++	var entries []Entry
++	var err error
++	if scope := r.URL.Query().Get("scope"); scope == "friends" {
++		entries, err = h.Svc.TopFriends(r.Context(), claims.GameID, board, claims.Subject, offset, limit, h.Friends)
++	} else if scope != "" {
++		httpx.Error(w, http.StatusBadRequest, "bad_scope", "scope must be friends")
++		return
++	} else {
++		entries, err = h.Svc.Top(r.Context(), claims.GameID, board, offset, limit)
++	}
+ 	if err != nil {
+ 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+ 		return
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/repo/achievements.go artifacts/prd-p2-20260906/current-final/internal/repo/achievements.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/repo/achievements.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/repo/achievements.go	2026-09-06 09:52:24.000000000 +0800
+@@ -11,6 +11,8 @@
+ // AchievementDefs manages the game-level achievement catalogue.
+ type AchievementDefs struct{ DB *pgxpool.Pool }
+ 
++var ErrAchievementUnlocked = errors.New("achievement has unlocked players")
++
+ const achDefCols = `id, game_id, key, name, description, icon_url, rarity, hidden, type, target, sort_order, created_at`
+ 
+ func scanAchDef(row pgx.Row) (*AchievementDef, error) {
+@@ -39,14 +41,27 @@
+ }
+ 
+ func (r AchievementDefs) Delete(ctx context.Context, id string) error {
+-	tag, err := r.DB.Exec(ctx, `DELETE FROM achievement_defs WHERE id=$1`, id)
++	tag, err := r.DB.Exec(ctx,
++		`DELETE FROM achievement_defs d
++		 WHERE d.id=$1
++		   AND NOT EXISTS (
++		     SELECT 1 FROM achievement_unlocks u
++		     WHERE u.achievement_id=d.id AND u.unlocked_at IS NOT NULL
++		   )`, id)
+ 	if err != nil {
+ 		return err
+ 	}
+-	if tag.RowsAffected() == 0 {
++	if tag.RowsAffected() > 0 {
++		return nil
++	}
++	var exists bool
++	if err := r.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM achievement_defs WHERE id=$1)`, id).Scan(&exists); err != nil {
++		return err
++	}
++	if !exists {
+ 		return ErrNotFound
+ 	}
+-	return nil
++	return ErrAchievementUnlocked
+ }
+ 
+ func (r AchievementDefs) ByID(ctx context.Context, id string) (*AchievementDef, error) {
+@@ -80,12 +95,40 @@
+ // achievement is unlocked (unlocked_at set to now on first unlock, preserved
+ // thereafter). Safe to call multiple times — only advances, never regresses.
+ func (r AchievementUnlocks) Upsert(ctx context.Context, achID, playerID string, progress int) (*AchievementUnlock, error) {
++	u, _, err := r.UpsertWithTransition(ctx, achID, playerID, progress)
++	return u, err
++}
++
++// UpsertWithTransition also reports whether this call changed the achievement
++// from locked to unlocked. The advisory transaction lock keeps that transition
++// exact for concurrent duplicate requests, so callers emit one webhook only.
++func (r AchievementUnlocks) UpsertWithTransition(ctx context.Context, achID, playerID string, progress int) (*AchievementUnlock, bool, error) {
++	tx, err := r.DB.Begin(ctx)
++	if err != nil {
++		return nil, false, err
++	}
++	defer tx.Rollback(ctx) //nolint:errcheck
++	if _, err := tx.Exec(ctx,
++		`SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2, 0))`, achID, playerID); err != nil {
++		return nil, false, err
++	}
++	var wasUnlocked bool
++	if err := tx.QueryRow(ctx,
++		`SELECT EXISTS(
++		   SELECT 1 FROM achievement_unlocks
++		   WHERE achievement_id=$1 AND player_id=$2 AND unlocked_at IS NOT NULL
++		 )`, achID, playerID).Scan(&wasUnlocked); err != nil {
++		return nil, false, err
++	}
++
+ 	var u AchievementUnlock
+-	err := r.DB.QueryRow(ctx,
+-		`WITH def AS (SELECT target FROM achievement_defs WHERE id=$1)
++	err = tx.QueryRow(ctx,
++		`WITH def AS (SELECT target, game_id FROM achievement_defs WHERE id=$1)
+ 		 INSERT INTO achievement_unlocks (achievement_id, player_id, progress, unlocked_at)
+ 		 SELECT $1, $2, $3,
+-		        CASE WHEN $3 >= (SELECT target FROM def) THEN now() ELSE NULL END
++		        CASE WHEN $3 >= def.target THEN now() ELSE NULL END
++		 FROM def
++		 JOIN players p ON p.id=$2 AND p.game_id=def.game_id
+ 		 ON CONFLICT (achievement_id, player_id) DO UPDATE
+ 		   SET progress    = GREATEST(achievement_unlocks.progress, EXCLUDED.progress),
+ 		       unlocked_at = CASE
+@@ -97,7 +140,16 @@
+ 		 RETURNING achievement_id, player_id, progress, unlocked_at`,
+ 		achID, playerID, progress,
+ 	).Scan(&u.AchievementID, &u.PlayerID, &u.Progress, &u.UnlockedAt)
+-	return &u, err
++	if errors.Is(err, pgx.ErrNoRows) {
++		return nil, false, ErrNotFound
++	}
++	if err != nil {
++		return nil, false, err
++	}
++	if err := tx.Commit(ctx); err != nil {
++		return nil, false, err
++	}
++	return &u, !wasUnlocked && u.UnlockedAt != nil, nil
+ }
+ 
+ // ByPlayer returns all unlock rows for a player (both locked-with-progress and unlocked).
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/repo/announcements.go artifacts/prd-p2-20260906/current-final/internal/repo/announcements.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/repo/announcements.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/repo/announcements.go	2026-09-06 09:56:29.000000000 +0800
+@@ -11,12 +11,13 @@
+ // Announcements manages server-broadcast messages for a game.
+ type Announcements struct{ DB *pgxpool.Pool }
+ 
+-const annCols = `id, game_id, title, body, importance, platform, active, expires_at, created_at, updated_at`
++const annCols = `id, game_id, title, body, importance, platform, channel, active, expires_at, created_at, updated_at`
++const annColsQualified = `a.id, a.game_id, a.title, a.body, a.importance, a.platform, a.channel, a.active, a.expires_at, a.created_at, a.updated_at`
+ 
+ func scanAnn(row pgx.Row) (*Announcement, error) {
+ 	var a Announcement
+ 	err := row.Scan(&a.ID, &a.GameID, &a.Title, &a.Body, &a.Importance,
+-		&a.Platform, &a.Active, &a.ExpiresAt, &a.CreatedAt, &a.UpdatedAt)
++		&a.Platform, &a.Channel, &a.Active, &a.ExpiresAt, &a.CreatedAt, &a.UpdatedAt)
+ 	if errors.Is(err, pgx.ErrNoRows) {
+ 		return nil, ErrNotFound
+ 	}
+@@ -25,17 +26,21 @@
+ 
+ func (r Announcements) Create(ctx context.Context, a Announcement) (*Announcement, error) {
+ 	return scanAnn(r.DB.QueryRow(ctx,
+-		`INSERT INTO announcements (game_id, title, body, importance, platform, expires_at)
+-		 VALUES ($1,$2,$3,$4,$5,$6) RETURNING `+annCols,
+-		a.GameID, a.Title, a.Body, a.Importance, a.Platform, a.ExpiresAt))
++		`INSERT INTO announcements (game_id, title, body, importance, platform, channel, expires_at)
++		 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING `+annCols,
++		a.GameID, a.Title, a.Body, a.Importance, a.Platform, a.Channel, a.ExpiresAt))
+ }
+ 
+ func (r Announcements) Update(ctx context.Context, id string, a Announcement) (*Announcement, error) {
+ 	return scanAnn(r.DB.QueryRow(ctx,
+ 		`UPDATE announcements
+-		 SET title=$2, body=$3, importance=$4, platform=$5, expires_at=$6, updated_at=now()
++		 SET title=$2, body=$3, importance=$4, platform=$5, channel=$6, expires_at=$7, updated_at=now()
+ 		 WHERE id=$1 RETURNING `+annCols,
+-		id, a.Title, a.Body, a.Importance, a.Platform, a.ExpiresAt))
++		id, a.Title, a.Body, a.Importance, a.Platform, a.Channel, a.ExpiresAt))
++}
++
++func (r Announcements) ByID(ctx context.Context, id string) (*Announcement, error) {
++	return scanAnn(r.DB.QueryRow(ctx, `SELECT `+annCols+` FROM announcements WHERE id=$1`, id))
+ }
+ 
+ func (r Announcements) Deactivate(ctx context.Context, id string) error {
+@@ -64,7 +69,7 @@
+ 		   AND (expires_at IS NULL OR expires_at > now())
+ 		   AND ($2='' OR id > $2::uuid)
+ 		 ORDER BY id ASC
+-		 LIMIT $3`,
++			 LIMIT $3`,
+ 		gameID, afterID, limit)
+ 	if err != nil {
+ 		return nil, err
+@@ -88,23 +93,30 @@
+ // PublicListByAppID resolves game by app_id then returns active non-expired
+ // announcements created after the announcement identified by afterID.
+ func (r Announcements) PublicListByAppID(ctx context.Context, appID, afterID string, limit int) ([]Announcement, error) {
++	return r.PublicListByAppIDFiltered(ctx, appID, afterID, "", "", limit)
++}
++
++// PublicListByAppIDFiltered applies optional platform and channel targeting.
++// An empty target on an announcement means that it is visible to every client.
++func (r Announcements) PublicListByAppIDFiltered(ctx context.Context, appID, afterID, platform, channel string, limit int) ([]Announcement, error) {
+ 	if limit <= 0 || limit > 100 {
+ 		limit = 50
+ 	}
+ 	rows, err := r.DB.Query(ctx,
+-		`SELECT a.id, a.game_id, a.title, a.body, a.importance, a.platform,
+-		        a.active, a.expires_at, a.created_at, a.updated_at
++		`SELECT `+annColsQualified+`
+ 		 FROM announcements a
+ 		 JOIN games g ON g.id = a.game_id
+ 		 WHERE g.app_id = $1
+ 		   AND a.active = TRUE
+ 		   AND (a.expires_at IS NULL OR a.expires_at > now())
++		   AND ($3 = '' OR a.platform = '' OR a.platform = $3)
++		   AND ($4 = '' OR a.channel = '' OR a.channel = $4)
+ 		   AND ($2 = '' OR (a.created_at, a.id) > (
+ 		       SELECT cursor.created_at, cursor.id FROM announcements cursor WHERE cursor.id = $2::uuid
+ 		   ))
+ 		 ORDER BY a.created_at ASC, a.id ASC
+-		 LIMIT $3`,
+-		appID, afterID, limit)
++			 LIMIT $5`,
++		appID, afterID, platform, channel, limit)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -121,7 +133,7 @@
+ 	for rows.Next() {
+ 		var a Announcement
+ 		if err := rows.Scan(&a.ID, &a.GameID, &a.Title, &a.Body, &a.Importance,
+-			&a.Platform, &a.Active, &a.ExpiresAt, &a.CreatedAt, &a.UpdatedAt); err != nil {
++			&a.Platform, &a.Channel, &a.Active, &a.ExpiresAt, &a.CreatedAt, &a.UpdatedAt); err != nil {
+ 			return nil, err
+ 		}
+ 		out = append(out, a)
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/repo/friends.go artifacts/prd-p2-20260906/current-final/internal/repo/friends.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/repo/friends.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/repo/friends.go	2026-09-06 10:03:50.000000000 +0800
+@@ -68,6 +68,20 @@
+ 	return nil
+ }
+ 
++func (r FriendRequests) DeclineInGame(ctx context.Context, id, gameID, callerID string) error {
++	tag, err := r.DB.Exec(ctx,
++		`UPDATE friend_requests SET status = 'declined', updated_at = now()
++		 WHERE id = $1 AND game_id = $2 AND status = 'pending' AND (from_id = $3 OR to_id = $3)`,
++		id, gameID, callerID)
++	if err != nil {
++		return err
++	}
++	if tag.RowsAffected() == 0 {
++		return ErrNotFound
++	}
++	return nil
++}
++
+ // DeleteBetween removes all request history between two players. It is called
+ // when they unfriend or block each other so a later request can start fresh.
+ func (r FriendRequests) DeleteBetween(ctx context.Context, gameID, p1, p2 string) error {
+@@ -201,6 +215,14 @@
+ 	return exists, err
+ }
+ 
++func (r Friendships) Count(ctx context.Context, gameID, playerID string) (int, error) {
++	var n int
++	err := r.DB.QueryRow(ctx,
++		`SELECT count(*) FROM friendships WHERE game_id=$1 AND (player_a=$2 OR player_b=$2)`,
++		gameID, playerID).Scan(&n)
++	return n, err
++}
++
+ // ── Player Blocks ─────────────────────────────────────────────────────────────
+ 
+ type PlayerBlocks struct{ DB *pgxpool.Pool }
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/repo/games.go artifacts/prd-p2-20260906/current-final/internal/repo/games.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/repo/games.go	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/repo/games.go	2026-09-06 10:05:19.000000000 +0800
+@@ -28,16 +28,16 @@
+ 	}
+ 	err := g.DB.QueryRow(ctx,
+ 		`INSERT INTO games (app_id, app_secret, name) VALUES ($1, $2, $3)
+-		 RETURNING id, status, created_at`,
++		 RETURNING id, status, created_at, friend_limit`,
+ 		game.AppID, game.AppSecret, game.Name,
+-	).Scan(&game.ID, &game.Status, &game.CreatedAt)
++	).Scan(&game.ID, &game.Status, &game.CreatedAt, &game.FriendLimit)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 	return game, nil
+ }
+ 
+-const gameCols = `id, app_id, app_secret, name, status, created_at, sso_redirect_urls, func_http_allowlist`
++const gameCols = `id, app_id, app_secret, name, status, created_at, sso_redirect_urls, func_http_allowlist, friend_limit`
+ 
+ func (g Games) ByAppID(ctx context.Context, appID string) (*Game, error) {
+ 	return g.scanOne(g.DB.QueryRow(ctx,
+@@ -52,7 +52,7 @@
+ func (g Games) scanOne(row pgx.Row) (*Game, error) {
+ 	var game Game
+ 	err := row.Scan(&game.ID, &game.AppID, &game.AppSecret, &game.Name, &game.Status, &game.CreatedAt,
+-		&game.SSORedirectURLs, &game.FuncHTTPAllowlist)
++		&game.SSORedirectURLs, &game.FuncHTTPAllowlist, &game.FriendLimit)
+ 	if errors.Is(err, pgx.ErrNoRows) {
+ 		return nil, ErrNotFound
+ 	}
+@@ -62,6 +62,17 @@
+ 	return &game, nil
+ }
+ 
++func (g Games) UpdateFriendLimit(ctx context.Context, id string, limit int) error {
++	tag, err := g.DB.Exec(ctx, `UPDATE games SET friend_limit = $2 WHERE id = $1`, id, limit)
++	if err != nil {
++		return err
++	}
++	if tag.RowsAffected() == 0 {
++		return ErrNotFound
++	}
++	return nil
++}
++
+ func (g Games) List(ctx context.Context) ([]Game, error) {
+ 	rows, err := g.DB.Query(ctx,
+ 		`SELECT `+gameCols+` FROM games ORDER BY created_at DESC`)
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/repo/models.go artifacts/prd-p2-20260906/current-final/internal/repo/models.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/repo/models.go	2026-08-13 19:13:05.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/repo/models.go	2026-09-06 10:05:19.000000000 +0800
+@@ -20,6 +20,7 @@
+ 	// FuncHTTPAllowlist is a newline-separated list of hosts (exact, or
+ 	// *.suffix) that this game's cloud functions may fetch.
+ 	FuncHTTPAllowlist string `json:"func_http_allowlist"`
++	FriendLimit       int    `json:"friend_limit"`
+ }
+ 
+ type Player struct {
+@@ -126,9 +127,9 @@
+ 
+ // Friend is a resolved friend entry returned in the friend list.
+ type Friend struct {
+-	PlayerID  string    `json:"player_id"`
+-	Nickname  string    `json:"nickname"`
+-	Online    bool      `json:"online"`
++	PlayerID    string    `json:"player_id"`
++	Nickname    string    `json:"nickname"`
++	Online      bool      `json:"online"`
+ 	FriendSince time.Time `json:"friend_since"`
+ }
+ 
+@@ -140,9 +141,9 @@
+ 	Name        string    `json:"name"`
+ 	Description string    `json:"description"`
+ 	IconURL     string    `json:"icon_url"`
+-	Rarity      string    `json:"rarity"`   // common / rare / epic / legendary
++	Rarity      string    `json:"rarity"` // common / rare / epic / legendary
+ 	Hidden      bool      `json:"hidden"`
+-	Type        string    `json:"type"`     // instant / progress
++	Type        string    `json:"type"` // instant / progress
+ 	Target      int       `json:"target"`
+ 	SortOrder   int       `json:"sort_order"`
+ 	CreatedAt   time.Time `json:"created_at"`
+@@ -241,6 +242,7 @@
+ 	Body       string     `json:"body"`
+ 	Importance string     `json:"importance"` // info / warning / critical
+ 	Platform   string     `json:"platform"`   // empty = all
++	Channel    string     `json:"channel"`    // empty = all channels
+ 	Active     bool       `json:"active"`
+ 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+ 	CreatedAt  time.Time  `json:"created_at"`
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/server/deps.go artifacts/prd-p2-20260906/current-final/internal/server/deps.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/server/deps.go	2026-08-13 19:39:54.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/server/deps.go	2026-09-06 10:05:19.000000000 +0800
+@@ -44,28 +44,28 @@
+ 	logs    *logs.Service
+ 	hub     *realtime.Hub
+ 
+-	authH         *auth.Handler
+-	ssoH          *sso.Handler
+-	oauthH        *oauth.Handler
+-	playerH       *player.Handler
+-	lbH           *leaderboard.Handler
+-	dialogueH     *dialogue.Handler
+-	chatH         *chat.Handler
+-	fnH           *funcs.Handler
+-	updatesH      *updates.Handler
+-	adminH        *admin.Handler
+-	hooksH        *hooks.Handler
+-	logsH         *logs.Handler
+-	statsH        *stats.Handler
+-	healthH       *stats.HealthHandler
+-	friendsH      *friends.Handler
+-	achievementsH *achievements.Handler
++	authH          *auth.Handler
++	ssoH           *sso.Handler
++	oauthH         *oauth.Handler
++	playerH        *player.Handler
++	lbH            *leaderboard.Handler
++	dialogueH      *dialogue.Handler
++	chatH          *chat.Handler
++	fnH            *funcs.Handler
++	updatesH       *updates.Handler
++	adminH         *admin.Handler
++	hooksH         *hooks.Handler
++	logsH          *logs.Handler
++	statsH         *stats.Handler
++	healthH        *stats.HealthHandler
++	friendsH       *friends.Handler
++	achievementsH  *achievements.Handler
+ 	announcementsH *announcements.Handler
+-	currencyH     *currency.Handler
+-	mailH         *mailbox.Handler
+-	bansH         *bans.Handler
+-	kvH           *kv.Handler
+-	exportsH      *exports.Handler
++	currencyH      *currency.Handler
++	mailH          *mailbox.Handler
++	bansH          *bans.Handler
++	kvH            *kv.Handler
++	exportsH       *exports.Handler
+ }
+ 
+ // newDeps constructs the services and starts the background workers. Every
+@@ -153,7 +153,7 @@
+ 			RefreshTokens: repo.OAuthRefreshTokens{DB: st.DB},
+ 		},
+ 		playerH:   &player.Handler{Players: players, Data: data},
+-		lbH:       &leaderboard.Handler{Svc: lbSvc, Events: bus},
++		lbH:       &leaderboard.Handler{Svc: lbSvc, Events: bus, Friends: repo.Friendships{DB: st.DB}},
+ 		dialogueH: &dialogue.Handler{Dialogues: repo.Dialogues{DB: st.DB}},
+ 		chatH:     &chat.Handler{Svc: chatSvc},
+ 		fnH:       fnHandler,
+@@ -177,6 +177,7 @@
+ 				Friendships: repo.Friendships{DB: st.DB},
+ 				Blocks:      repo.PlayerBlocks{DB: st.DB},
+ 				Players:     players,
++				Games:       games,
+ 			},
+ 			Hub: hub,
+ 		},
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/server/routes.go artifacts/prd-p2-20260906/current-final/internal/server/routes.go
+--- artifacts/prd-p2-20260906/pristine-final/internal/server/routes.go	2026-08-13 19:40:10.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/server/routes.go	2026-09-06 10:05:19.000000000 +0800
+@@ -166,6 +166,7 @@
+ 	a("DELETE /admin/api/accounts/{id}", d.adminH.DeleteAccount)
+ 	a("PUT /admin/api/games/{id}/sso", d.adminH.UpdateGameSSO)
+ 	a("PUT /admin/api/games/{id}/http-allowlist", d.adminH.UpdateGameHTTPAllowlist)
++	a("PUT /admin/api/games/{id}/friend-limit", d.adminH.UpdateGameFriendLimit)
+ 
+ 	a("GET /admin/api/oauth/clients", d.adminH.ListOAuthClients)
+ 	a("POST /admin/api/oauth/clients", d.adminH.CreateOAuthClient)
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/store/migrations/0018_announcement_channels.sql artifacts/prd-p2-20260906/current-final/internal/store/migrations/0018_announcement_channels.sql
+--- artifacts/prd-p2-20260906/pristine-final/internal/store/migrations/0018_announcement_channels.sql	1970-01-01 08:00:00.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/store/migrations/0018_announcement_channels.sql	2026-09-06 09:42:42.000000000 +0800
+@@ -0,0 +1,2 @@
++ALTER TABLE announcements ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT '';
++CREATE INDEX IF NOT EXISTS idx_announcements_target ON announcements (game_id, platform, channel, created_at);
+diff -ruN artifacts/prd-p2-20260906/pristine-final/internal/store/migrations/0019_friend_limit.sql artifacts/prd-p2-20260906/current-final/internal/store/migrations/0019_friend_limit.sql
+--- artifacts/prd-p2-20260906/pristine-final/internal/store/migrations/0019_friend_limit.sql	1970-01-01 08:00:00.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/internal/store/migrations/0019_friend_limit.sql	2026-09-06 10:05:19.000000000 +0800
+@@ -0,0 +1,3 @@
++ALTER TABLE games ADD COLUMN IF NOT EXISTS friend_limit INT NOT NULL DEFAULT 200;
++ALTER TABLE games DROP CONSTRAINT IF EXISTS games_friend_limit_check;
++ALTER TABLE games ADD CONSTRAINT games_friend_limit_check CHECK (friend_limit BETWEEN 1 AND 10000);
+diff -ruN artifacts/prd-p2-20260906/pristine-final/sdk/src/index.ts artifacts/prd-p2-20260906/current-final/sdk/src/index.ts
+--- artifacts/prd-p2-20260906/pristine-final/sdk/src/index.ts	2026-08-13 19:43:57.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/sdk/src/index.ts	2026-09-06 10:01:48.000000000 +0800
+@@ -128,6 +128,7 @@
+   body: string;
+   importance: "info" | "warning" | "critical";
+   platform: string;
++  channel: string;
+   active: boolean;
+   expires_at?: string;
+   created_at: string;
+@@ -146,6 +147,27 @@
+   artifact?: { url: string; filename: string; size: number; sha256: string };
+ }
+ 
++export interface Release {
++  id: number;
++  game_id: string;
++  channel: string;
++  version: string;
++  changelog: string;
++  status: string;
++  mandatory: boolean;
++  min_supported_version?: string;
++  rollout_percent: number;
++  published_at?: string;
++  created_at: string;
++}
++
++export interface ClientLog {
++  level?: "debug" | "info" | "warn" | "error";
++  event?: string;
++  message: string;
++  fields?: Record<string, Json>;
++}
++
+ export interface DialogueScript {
+   id: string;
+   game_id: string;
+@@ -285,6 +307,13 @@
+   updateProfile(opts: { nickname?: string; profile?: Json }): Promise<Player> {
+     return this.http.request("PUT", "/v1/player/profile", { body: opts });
+   }
++
++  bind(opts: { ticket?: string; username?: string; password?: string }): Promise<{ bound: boolean; account_id: string }> {
++    if (!opts.ticket && !(opts.username && opts.password)) {
++      return Promise.reject(new MiniCloudError(0, "bad_options", "ticket or username/password is required"));
++    }
++    return this.http.request("POST", "/v1/player/bind", { body: opts });
++  }
+ }
+ 
+ class PlayerDataAPI {
+@@ -321,11 +350,11 @@
+     return res.score;
+   }
+ 
+-  async top(board: string, opts: { offset?: number; limit?: number } = {}): Promise<LeaderboardEntry[]> {
++  async top(board: string, opts: { offset?: number; limit?: number; scope?: "friends" } = {}): Promise<LeaderboardEntry[]> {
+     const res = await this.http.request<{ entries: LeaderboardEntry[] }>(
+       "GET",
+       `/v1/leaderboards/${encodeURIComponent(board)}`,
+-      { query: { offset: opts.offset, limit: opts.limit } },
++      { query: { offset: opts.offset, limit: opts.limit, scope: opts.scope } },
+     );
+     return res.entries;
+   }
+@@ -428,11 +457,11 @@
+ class AnnouncementsAPI {
+   constructor(private readonly sdk: MiniCloud, private readonly http: Http) {}
+ 
+-  async list(opts: { afterId?: string } = {}): Promise<Announcement[]> {
++  async list(opts: { afterId?: string; platform?: string; channel?: string } = {}): Promise<Announcement[]> {
+     const res = await this.http.request<{ announcements: Announcement[] }>(
+       "GET",
+       `/v1/apps/${encodeURIComponent(this.sdk.appId)}/announcements`,
+-      { auth: false, query: { after_id: opts.afterId } },
++      { auth: false, query: { after_id: opts.afterId, platform: opts.platform, channel: opts.channel } },
+     );
+     return res.announcements;
+   }
+@@ -477,6 +506,21 @@
+       },
+     });
+   }
++
++  async releases(): Promise<Release[]> {
++    const res = await this.http.request<{ releases: Release[] }>(
++      "GET", `/v1/apps/${encodeURIComponent(this.sdk.appId)}/releases`, { auth: false },
++    );
++    return res.releases;
++  }
++}
++
++class LogsAPI {
++  constructor(private readonly http: Http) {}
++
++  report(entry: ClientLog): Promise<{ accepted: boolean }> {
++    return this.http.request("POST", "/v1/logs", { body: entry });
++  }
+ }
+ 
+ class DialoguesAPI {
+@@ -560,6 +604,26 @@
+ 
+ type Listener = (data: never) => void;
+ 
++export interface RealtimeEventData {
++  open: { reconnected: boolean };
++  close: { code?: number; reason?: string };
++  reconnecting: { attempt: number; delay: number };
++  replaced: Record<string, never>;
++  welcome: { player_id: string; nickname: string };
++  error: { code?: string; message?: string };
++  "room.created": Room;
++  "room.joined": Room;
++  "room.left": Record<string, never>;
++  "room.list": { rooms: Room[] };
++  "room.member_joined": { player_id: string; nickname: string };
++  "room.member_left": { player_id: string; new_owner: string };
++  "room.state": { player_id: string; state: Json };
++  "room.msg": { player_id: string; data: Json };
++  "chat.subbed": { channel: string };
++  "chat.unsubbed": { channel: string };
++  "chat.msg": ChatMessage;
++}
++
+ const OPEN = 1;
+ const REPLACED_CODE = 1008;
+ const REQUEST_TIMEOUT_MS = 10_000;
+@@ -575,6 +639,7 @@
+   private attempts = 0;
+   private manuallyClosed = false;
+   private everConnected = false;
++  private connecting?: Promise<void>;
+ 
+   constructor(private readonly sdk: MiniCloud) {}
+ 
+@@ -584,9 +649,15 @@
+ 
+   connect(): Promise<void> {
+     if (this.connected) return Promise.resolve();
++    if (this.connecting) return this.connecting;
+     if (!this.sdk.token) return Promise.reject(new MiniCloudError(0, "no_token", "log in before connecting"));
+     this.manuallyClosed = false;
+-    return this.open();
++    const pending = this.open();
++    const wrapped = pending.finally(() => {
++      if (this.connecting === wrapped) this.connecting = undefined;
++    });
++    this.connecting = wrapped;
++    return wrapped;
+   }
+ 
+   private wsURL(): string {
+@@ -607,6 +678,10 @@
+       let settled = false;
+ 
+       ws.addEventListener("open", () => {
++        if (this.ws !== ws) {
++          ws.close(1000, "stale connection");
++          return;
++        }
+         settled = true;
+         this.attempts = 0;
+         const resub = this.everConnected;
+@@ -626,6 +701,7 @@
+         if (env.type) this.emit(env.type, env.data);
+       });
+       ws.addEventListener("close", (event: { code?: number; reason?: string }) => {
++        if (this.ws !== ws) return;
+         this.stopPing();
+         const e = event as { code?: number; reason?: string };
+         this.emit("close", { code: e.code, reason: e.reason });
+@@ -678,7 +754,7 @@
+     this.ws = undefined;
+   }
+ 
+-  on<T = unknown>(type: RealtimeEvent, listener: (data: T) => void): () => void {
++  on<K extends RealtimeEvent>(type: K, listener: (data: K extends keyof RealtimeEventData ? RealtimeEventData[K] : unknown) => void): () => void {
+     let set = this.listeners.get(type);
+     if (!set) {
+       set = new Set();
+@@ -688,7 +764,7 @@
+     return () => this.off(type, listener);
+   }
+ 
+-  off<T = unknown>(type: RealtimeEvent, listener: (data: T) => void): void {
++  off<K extends RealtimeEvent>(type: K, listener: (data: K extends keyof RealtimeEventData ? RealtimeEventData[K] : unknown) => void): void {
+     this.listeners.get(type)?.delete(listener as Listener);
+   }
+ 
+@@ -709,8 +785,8 @@
+   private request<T>(sendType: string, data: unknown, replyType: string): Promise<T> {
+     return new Promise<T>((resolve, reject) => {
+       const cleanup = () => {
+-        this.off(replyType, onReply);
+-        this.off("error", onError);
++        this.off(replyType as RealtimeEvent, onReply as (data: unknown) => void);
++        this.off("error", onError as (data: unknown) => void);
+         clearTimeout(timer);
+       };
+       const onReply = (reply: T) => {
+@@ -803,6 +879,7 @@
+   readonly dialogues: DialoguesAPI;
+   readonly chat: ChatAPI;
+   readonly kv: KVAPI;
++  readonly logs: LogsAPI;
+   readonly realtime: RealtimeClient;
+ 
+   constructor(options: MiniCloudOptions) {
+@@ -832,6 +909,7 @@
+     this.dialogues = new DialoguesAPI(http);
+     this.chat = new ChatAPI(http);
+     this.kv = new KVAPI(http);
++    this.logs = new LogsAPI(http);
+     this.realtime = new RealtimeClient(this);
+   }
+ }
+diff -ruN artifacts/prd-p2-20260906/pristine-final/web/admin/core.js artifacts/prd-p2-20260906/current-final/web/admin/core.js
+--- artifacts/prd-p2-20260906/pristine-final/web/admin/core.js	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/web/admin/core.js	2026-09-06 09:56:58.000000000 +0800
+@@ -24,6 +24,10 @@
+   return d.innerHTML;
+ }
+ 
++// JSON arguments embedded in an inline handler must be HTML-escaped first;
++// otherwise a quote in an operator-entered title can terminate the attribute.
++function inlineJSON(value) { return esc(JSON.stringify(value)); }
++
+ function fmtTime(t) { return t ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : '—'; }
+ 
+ // Relative time reads faster than a timestamp for "is this recent?".
+diff -ruN artifacts/prd-p2-20260906/pristine-final/web/admin/index.html artifacts/prd-p2-20260906/current-final/web/admin/index.html
+--- artifacts/prd-p2-20260906/pristine-final/web/admin/index.html	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/web/admin/index.html	2026-09-06 09:55:36.000000000 +0800
+@@ -74,6 +74,8 @@
+ <script src="page-releases.js"></script>
+ <script src="page-functions.js"></script>
+ <script src="page-webhooks.js"></script>
++<script src="page-achievements.js"></script>
++<script src="page-announcements.js"></script>
+ <script src="page-logs.js"></script>
+ <script src="page-settings.js"></script>
+ <script src="boot.js"></script>
+diff -ruN artifacts/prd-p2-20260906/pristine-final/web/admin/layout.css artifacts/prd-p2-20260906/current-final/web/admin/layout.css
+--- artifacts/prd-p2-20260906/pristine-final/web/admin/layout.css	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/web/admin/layout.css	2026-09-06 09:56:04.000000000 +0800
+@@ -113,6 +113,15 @@
+ .kv:last-child { border-bottom: none; }
+ .kv > span:first-child { color: var(--on-surface-variant); font-size: 13px; }
+ 
++.announcement-preview {
++  margin-top: 12px; padding: 14px 16px;
++  background: var(--surface-container-highest);
++  border-radius: var(--shape-sm); line-height: 1.65;
++  min-height: 48px;
++}
++.announcement-preview h3 { margin-bottom: 8px; font-size: 16px; line-height: 22px; }
++.announcement-preview p { color: var(--on-surface); }
++
+ /* ---------- trend chart ---------- */
+ .chart { display: flex; align-items: flex-end; gap: 3px; height: 160px; }
+ .chart-col { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+diff -ruN artifacts/prd-p2-20260906/pristine-final/web/admin/nav.js artifacts/prd-p2-20260906/current-final/web/admin/nav.js
+--- artifacts/prd-p2-20260906/pristine-final/web/admin/nav.js	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/web/admin/nav.js	2026-09-06 09:55:36.000000000 +0800
+@@ -18,6 +18,8 @@
+   releases:  { title: '版本更新',   scopes: ['game'], render: h => renderReleases(h) },
+   functions: { title: '云函数',     scopes: ['game'], render: h => renderFunctions(h) },
+   webhooks:  { title: 'WebHook',    scopes: ['game'], render: h => renderWebhooks(h) },
++  achievements: { title: '成就',    scopes: ['game'], render: h => renderAchievements(h) },
++  announcements: { title: '公告',  scopes: ['game'], render: h => renderAnnouncements(h) },
+   settings:  { title: '设置',       scopes: ['game'], render: h => renderSettings(h) },
+ 
+   logs:      { title: '日志',       scopes: ['platform', 'game'], render: h => renderLogs(h) },
+@@ -39,6 +41,8 @@
+   ['releases', 'M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6l-8-4Zm-1 14-4-4 1.4-1.4L11 13.2l4.6-4.6L17 10l-6 6Z'],
+   ['functions', 'M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4Zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4Z'],
+   ['webhooks', 'M10 4a4 4 0 0 1 3.8 5.3l3.4 5.8a4 4 0 1 1-1.8 1L12 10.6a4 4 0 1 1-2-6.6Zm-3 13a4 4 0 0 1 3.9-4h4.2v2h-4.2a2 2 0 1 0 0 4H12v2h-1.1A4 4 0 0 1 7 17Z'],
++  ['achievements', 'M12 2 14.8 8l6.5.6-4.9 4.3 1.5 6.4L12 16l-5.9 3.3 1.5-6.4-4.9-4.3L9.2 8 12 2Z'],
++  ['announcements', 'M4 4h16v12H7l-3 3V4Zm3 4v2h10V8H7Zm0 4v2h7v-2H7Z'],
+   ['logs', 'M4 3h16v2H4V3Zm0 4h16v2H4V7Zm0 4h10v2H4v-2Zm0 4h16v2H4v-2Zm0 4h10v2H4v-2Z'],
+   ['settings', 'M19.4 13a7.8 7.8 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.3 2.6c-.6.3-1.2.6-1.7 1l-2.4-1-2 3.4L4.6 11a7.8 7.8 0 0 0 0 2l-2 1.6 2 3.4 2.4-1c.5.4 1.1.8 1.7 1l.3 2.6h4l.3-2.6c.6-.2 1.2-.6 1.7-1l2.4 1 2-3.4-2-1.6ZM13 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z'],
+ ];
+diff -ruN artifacts/prd-p2-20260906/pristine-final/web/admin/page-achievements.js artifacts/prd-p2-20260906/current-final/web/admin/page-achievements.js
+--- artifacts/prd-p2-20260906/pristine-final/web/admin/page-achievements.js	1970-01-01 08:00:00.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/web/admin/page-achievements.js	2026-09-06 10:11:51.000000000 +0800
+@@ -0,0 +1,108 @@
++// Achievement catalogue management and server-side unlock testing.
++
++const ACH_RARITIES = [
++  ['common', '普通'], ['rare', '稀有'], ['epic', '史诗'], ['legendary', '传说'],
++];
++
++async function renderAchievements(host) {
++  const { achievements } = await api('GET', `/admin/api/games/${state.gameId}/achievements`);
++  const rows = achievements || [];
++  pageShell(host, {
++    title: '成就',
++    subtitle: '定义成就目标，由服务端解锁；隐藏成就在玩家解锁前不会泄露详情。',
++    actions: `<button class="btn filled" onclick="achievementDialog()">新建成就</button>`,
++    body: rows.length ? `<div class="card table-card"><table>
++      <thead><tr><th>成就</th><th>类型</th><th>稀有度</th><th>目标</th><th>状态</th><th></th></tr></thead>
++      <tbody>${rows.map(achievementRow).join('')}</tbody>
++    </table></div>` : emptyState('★', '还没有成就', '创建第一个成就后，服务端可以按玩家进度触发解锁。'),
++  });
++}
++
++function achievementRow(a) {
++  const rarity = ACH_RARITIES.find(([key]) => key === a.rarity)?.[1] || a.rarity;
++  return `<tr>
++    <td><b>${esc(a.name)}</b><div class="dim"><code>${esc(a.key)}</code>${a.hidden ? ' · 隐藏' : ''}</div></td>
++    <td><span class="badge">${a.type === 'progress' ? '进度型' : '即时型'}</span></td>
++    <td>${esc(rarity)}</td>
++    <td>${a.type === 'progress' ? fmtNum(a.target) : '—'}</td>
++    <td><span class="badge">已配置</span></td>
++    <td><div class="row">
++      <button class="btn text" onclick="achievementDialog(${inlineJSON(a)})">编辑</button>
++      <button class="btn text" onclick="unlockAchievement(${inlineJSON(a.id)},${inlineJSON(a.name)})">解锁</button>
++      <button class="btn text danger" onclick="deleteAchievement(${inlineJSON(a.id)},${inlineJSON(a.name)})">删除</button>
++    </div></td>
++  </tr>`;
++}
++
++function achievementDialog(a = null) {
++  const editing = Boolean(a);
++  const rarity = a?.rarity || 'common';
++  const type = a?.type || 'instant';
++  openDialog({
++    title: editing ? `编辑成就「${a.name}」` : '新建成就',
++    body: `${editing ? '' : dlgField('achKey', '唯一 key(如 first_login)')}
++      ${dlgField('achName', '名称', a?.name || '')}
++      <label class="field"><textarea id="achDescription" placeholder=" ">${esc(a?.description || '')}</textarea><span class="label">描述</span></label>
++      ${dlgField('achIcon', '图标 URL', a?.icon_url || '')}
++      <div class="filters" style="margin-top:16px">
++        <label class="field"><select id="achRarity">${ACH_RARITIES.map(([key, label]) => `<option value="${key}" ${key === rarity ? 'selected' : ''}>${label}</option>`).join('')}</select><span class="label">稀有度</span></label>
++        <label class="field"><select id="achType" onchange="toggleAchievementTarget()"><option value="instant" ${type === 'instant' ? 'selected' : ''}>即时型</option><option value="progress" ${type === 'progress' ? 'selected' : ''}>进度型</option></select><span class="label">类型</span></label>
++        ${dlgField('achTarget', '目标值', a?.target || 1, 'number')}
++        ${dlgField('achSort', '排序', a?.sort_order || 0, 'number')}
++      </div>
++      <label class="check"><input id="achHidden" type="checkbox" ${a?.hidden ? 'checked' : ''}> 隐藏成就</label>`,
++    confirmText: editing ? '保存' : '创建',
++    onConfirm: async () => {
++      const typeValue = document.getElementById('achType').value;
++      const payload = {
++        ...(editing ? {} : { key: dlgVal('achKey') }),
++        name: dlgVal('achName'),
++        description: document.getElementById('achDescription').value,
++        icon_url: dlgVal('achIcon'),
++        rarity: document.getElementById('achRarity').value,
++        hidden: document.getElementById('achHidden').checked,
++        type: typeValue,
++        target: typeValue === 'instant' ? 1 : Number(document.getElementById('achTarget').value),
++        sort_order: Number(document.getElementById('achSort').value) || 0,
++      };
++      if (!payload.name) throw new Error('请输入成就名称');
++      if (!editing && !payload.key) throw new Error('请输入成就 key');
++      if (typeValue === 'progress' && (!Number.isInteger(payload.target) || payload.target < 1)) throw new Error('进度目标必须是正整数');
++      await api(editing ? 'PUT' : 'POST', editing ? `/admin/api/achievements/${a.id}` : `/admin/api/games/${state.gameId}/achievements`, payload);
++      toast(editing ? '已保存' : '已创建');
++      await route();
++    },
++  });
++  toggleAchievementTarget();
++}
++
++function toggleAchievementTarget() {
++  const type = document.getElementById('achType');
++  const target = document.getElementById('achTarget');
++  if (type && target) target.disabled = type.value === 'instant';
++}
++
++function deleteAchievement(id, name) {
++  confirmDelete(`成就「${name}」`, async () => {
++    await api('DELETE', `/admin/api/achievements/${id}`);
++    toast('已删除');
++    await route();
++  });
++}
++
++function unlockAchievement(id, name) {
++  openDialog({
++    title: `解锁「${name}」`,
++    body: dlgField('unlockPlayer', '玩家 ID') + dlgField('unlockProgress', '进度(留空=完成)', '', 'number'),
++    confirmText: '解锁',
++    onConfirm: async () => {
++      const playerId = dlgVal('unlockPlayer');
++      if (!playerId) throw new Error('请输入玩家 ID');
++      const raw = dlgVal('unlockProgress');
++      const body = { player_id: playerId };
++      if (raw) body.progress = Number(raw);
++      await api('POST', `/admin/api/achievements/${id}/unlock`, body);
++      toast('已触发解锁');
++    },
++  });
++}
+diff -ruN artifacts/prd-p2-20260906/pristine-final/web/admin/page-announcements.js artifacts/prd-p2-20260906/current-final/web/admin/page-announcements.js
+--- artifacts/prd-p2-20260906/pristine-final/web/admin/page-announcements.js	1970-01-01 08:00:00.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/web/admin/page-announcements.js	2026-09-06 10:28:03.000000000 +0800
+@@ -0,0 +1,104 @@
++// Server announcements: publish, target, preview, edit, and deactivate.
++
++const ANN_IMPORTANCE = { info: '通知', warning: '提醒', critical: '重要' };
++
++async function renderAnnouncements(host) {
++  const { announcements } = await api('GET', `/admin/api/games/${state.gameId}/announcements`);
++  const rows = announcements || [];
++  pageShell(host, {
++    title: '公告',
++    subtitle: '客户端通过轮询增量获取公告；可按平台和渠道定向发布。',
++    actions: `<button class="btn filled" onclick="announcementDialog()">发布公告</button>`,
++    body: rows.length ? `<div class="card table-card"><table>
++      <thead><tr><th>公告</th><th>重要性</th><th>定向</th><th>有效期</th><th>状态</th><th></th></tr></thead>
++      <tbody>${rows.map(announcementRow).join('')}</tbody>
++    </table></div>` : emptyState('!', '还没有公告', '发布第一条公告，客户端即可在更新或活动时展示。'),
++  });
++}
++
++function announcementRow(a) {
++  const expired = a.expires_at && new Date(a.expires_at) <= new Date();
++  const stateLabel = !a.active ? '已下架' : expired ? '已过期' : '发布中';
++  return `<tr>
++    <td><b>${esc(a.title)}</b><div class="dim">${fmtAgo(a.created_at)}</div></td>
++    <td><span class="badge ${a.importance === 'critical' ? 'error' : a.importance === 'warning' ? 'ok' : ''}">${ANN_IMPORTANCE[a.importance] || esc(a.importance)}</span></td>
++    <td class="dim">${esc([a.platform, a.channel].filter(Boolean).join(' / ') || '全服')}</td>
++    <td class="dim">${a.expires_at ? `至 ${fmtTime(a.expires_at)}` : '永久'}</td>
++    <td><span class="badge ${a.active && !expired ? 'ok' : ''}">${stateLabel}</span></td>
++    <td><div class="row">
++      <button class="btn text" onclick="previewAnnouncement(${inlineJSON(a)})">预览</button>
++      <button class="btn text" onclick="announcementDialog(${inlineJSON(a)})">编辑</button>
++      ${a.active ? `<button class="btn text danger" onclick="deactivateAnnouncement(${inlineJSON(a.id)})">下架</button>` : ''}
++    </div></td>
++  </tr>`;
++}
++
++function announcementDialog(a = null) {
++  const editing = Boolean(a);
++  const expirySeconds = a?.expires_at ? Math.max(1, Math.ceil((new Date(a.expires_at) - Date.now()) / 1000)) : '';
++  openDialog({
++    title: editing ? `编辑公告「${a.title}」` : '发布公告',
++    body: `${dlgField('annTitle', '标题', a?.title || '')}
++      <label class="field"><textarea id="annBody" placeholder=" " oninput="updateAnnouncementPreview()">${esc(a?.body || '')}</textarea><span class="label">正文 Markdown</span></label>
++      <div id="annPreview" class="announcement-preview dim">预览区域</div>
++      <div class="filters" style="margin-top:16px">
++        <label class="field"><select id="annImportance"><option value="info" ${a?.importance === 'info' || !a ? 'selected' : ''}>通知</option><option value="warning" ${a?.importance === 'warning' ? 'selected' : ''}>提醒</option><option value="critical" ${a?.importance === 'critical' ? 'selected' : ''}>重要</option></select><span class="label">重要性</span></label>
++        ${dlgField('annPlatform', '平台(留空=全部)', a?.platform || '')}
++        ${dlgField('annChannel', '渠道(留空=全部)', a?.channel || '')}
++        ${dlgField('annExpires', '有效期秒数(留空=永久)', expirySeconds, 'number')}
++      </div>
++      <label class="check"><input id="annPermanent" type="checkbox" ${editing && !a.expires_at ? 'checked' : ''}> 永久有效</label>`,
++    confirmText: editing ? '保存' : '发布',
++    onConfirm: async () => {
++      const payload = {
++        title: dlgVal('annTitle'),
++        body: document.getElementById('annBody').value,
++        importance: document.getElementById('annImportance').value,
++        platform: dlgVal('annPlatform'),
++        channel: dlgVal('annChannel'),
++      };
++      if (!payload.title) throw new Error('请输入公告标题');
++      const expiry = Number(dlgVal('annExpires'));
++      const permanent = document.getElementById('annPermanent').checked;
++      if (permanent) {
++        if (editing) payload.clear_expires = true;
++      } else if (dlgVal('annExpires')) {
++        if (!Number.isInteger(expiry) || expiry <= 0) throw new Error('有效期必须是正整数秒数');
++        payload.expires_in_secs = expiry;
++      } else if (editing && a.expires_at) {
++        payload.expires_at = a.expires_at;
++      }
++      await api(editing ? 'PUT' : 'POST', editing ? `/admin/api/announcements/${a.id}` : `/admin/api/games/${state.gameId}/announcements`, payload);
++      toast(editing ? '已保存' : '已发布');
++      await route();
++    },
++  });
++  updateAnnouncementPreview();
++}
++
++function markdownPreview(value) {
++  return esc(value || '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`(.+?)`/g, '<code>$1</code>').replace(/\n/g, '<br>');
++}
++
++function updateAnnouncementPreview() {
++  const input = document.getElementById('annBody');
++  const preview = document.getElementById('annPreview');
++  if (input && preview) preview.innerHTML = markdownPreview(input.value) || '预览区域';
++}
++
++function previewAnnouncement(a) {
++  openDialog({
++    title: `公告预览 · ${a.title}`,
++    body: `<div class="announcement-preview"><h3>${esc(a.title)}</h3><p>${markdownPreview(a.body)}</p></div>`,
++    confirmText: '关闭',
++    onConfirm: async () => {},
++  });
++}
++
++function deactivateAnnouncement(id) {
++  confirmDelete('这条公告(下架)', async () => {
++    await api('DELETE', `/admin/api/announcements/${id}`);
++    toast('已下架');
++    await route();
++  });
++}
+diff -ruN artifacts/prd-p2-20260906/pristine-final/web/admin/page-settings.js artifacts/prd-p2-20260906/current-final/web/admin/page-settings.js
+--- artifacts/prd-p2-20260906/pristine-final/web/admin/page-settings.js	2026-08-13 19:02:26.000000000 +0800
++++ artifacts/prd-p2-20260906/current-final/web/admin/page-settings.js	2026-09-06 10:28:25.000000000 +0800
+@@ -1,5 +1,5 @@
+-// Per-game settings: the credentials a client needs, and the two allowlists
+-// that gate SSO redirects and cloud-function outbound requests.
++// Per-game settings: credentials, social limits, and the allowlists that gate
++// SSO redirects and cloud-function outbound requests.
+ 
+ async function renderSettings(host) {
+   const g = state.game;
+@@ -16,6 +16,15 @@
+       </div>
+ 
+       <div class="card">
++        <h2>社交设置</h2>
++        <p class="dim" style="margin-bottom:16px">限制单个玩家可拥有的好友数量，默认 200。</p>
++        <label class="field compact" style="max-width:240px">
++          <input id="setFriendLimit" type="number" min="1" max="10000" placeholder=" " value="${esc(g.friend_limit || 200)}">
++          <span class="label">好友数上限</span></label>
++        <div class="row" style="margin-top:16px"><button class="btn filled" onclick="saveFriendLimit()">保存</button></div>
++      </div>
++
++      <div class="card">
+         <h2>SSO 回跳白名单</h2>
+         <p class="dim" style="margin-bottom:16px">
+           托管授权页 <code>/sso/authorize</code> 只会回跳到这里列出的地址。每行一个;
+@@ -51,6 +60,16 @@
+   });
+ }
+ 
++async function saveFriendLimit() {
++  const limit = Number(document.getElementById('setFriendLimit').value);
++  if (!Number.isInteger(limit) || limit < 1 || limit > 10000) return toast('好友数上限必须是 1-10000 的整数');
++  try {
++    await api('PUT', `/admin/api/games/${state.gameId}/friend-limit`, { limit });
++    await refreshGames();
++    toast('已保存');
++  } catch (e) { toast('保存失败:' + e.message); }
++}
++
+ async function saveSSO() {
+   try {
+     await api('PUT', `/admin/api/games/${state.gameId}/sso`,

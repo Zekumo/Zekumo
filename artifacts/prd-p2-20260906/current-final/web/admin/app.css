@@ -1,0 +1,424 @@
+/* Material Design 3 for the MiniCloud console.
+   Hand-rolled: the page is served from the embedded filesystem, so no CDN
+   font or component library is available. Token names follow the M3 roles so
+   the mapping stays recognisable. */
+
+/* ---------- color roles: tones from a blue source palette ---------- */
+:root {
+  /* light scheme */
+  --primary: #0060a4;             --on-primary: #ffffff;
+  --primary-container: #d3e4ff;   --on-primary-container: #001c3a;
+  --secondary: #526070;           --on-secondary: #ffffff;
+  --secondary-container: #d6e4f7; --on-secondary-container: #0e1d2a;
+  --tertiary: #6b5778;            --on-tertiary: #ffffff;
+  --tertiary-container: #f6dbff;  --on-tertiary-container: #251431;
+  --error: #ba1a1a;               --on-error: #ffffff;
+  --error-container: #ffdad6;     --on-error-container: #410002;
+
+  --surface: #faf9fd;             --on-surface: #1a1c1e;
+  --surface-variant: #dee3eb;     --on-surface-variant: #42474e;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f4f3f7;
+  --surface-container: #eeedf1;
+  --surface-container-high: #e9e7ec;
+  --surface-container-highest: #e3e2e6;
+  --outline: #72777f;             --outline-variant: #c2c7cf;
+  --inverse-surface: #2f3033;     --inverse-on-surface: #f1f0f4;
+
+  --elev-1: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15);
+  --elev-2: 0 1px 2px rgba(0,0,0,.3), 0 2px 6px 2px rgba(0,0,0,.15);
+  --elev-3: 0 1px 3px rgba(0,0,0,.3), 0 4px 8px 3px rgba(0,0,0,.15);
+
+  /* shape scale */
+  --shape-xs: 4px;  --shape-sm: 8px;  --shape-md: 12px;
+  --shape-lg: 16px; --shape-xl: 28px; --shape-full: 999px;
+
+  /* motion */
+  --ease-standard: cubic-bezier(.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(.05, .7, .1, 1);
+  --dur-short: 150ms; --dur-medium: 250ms;
+
+  color-scheme: light;
+}
+
+/* The dark scheme, applied by system preference or by the explicit toggle.
+   Both selectors carry the same values; [data-theme] wins by specificity. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --primary: #9fcaff;             --on-primary: #00325f;
+    --primary-container: #004880;   --on-primary-container: #d3e4ff;
+    --secondary: #bac8db;           --on-secondary: #243240;
+    --secondary-container: #3a4857; --on-secondary-container: #d6e4f7;
+    --tertiary: #d9bfe6;            --on-tertiary: #3b2948;
+    --tertiary-container: #533f60;  --on-tertiary-container: #f6dbff;
+    --error: #ffb4ab;               --on-error: #690005;
+    --error-container: #93000a;     --on-error-container: #ffdad6;
+
+    --surface: #101418;             --on-surface: #e3e2e6;
+    --surface-variant: #42474e;     --on-surface-variant: #c2c7cf;
+    --surface-container-lowest: #0b0f14;
+    --surface-container-low: #1a1c1e;
+    --surface-container: #1e2022;
+    --surface-container-high: #282a2d;
+    --surface-container-highest: #333538;
+    --outline: #8c9199;             --outline-variant: #42474e;
+    --inverse-surface: #e3e2e6;     --inverse-on-surface: #2f3033;
+
+    --elev-1: 0 1px 3px rgba(0,0,0,.5);
+    --elev-2: 0 2px 6px rgba(0,0,0,.55);
+    --elev-3: 0 4px 12px rgba(0,0,0,.6);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --primary: #9fcaff;             --on-primary: #00325f;
+  --primary-container: #004880;   --on-primary-container: #d3e4ff;
+  --secondary: #bac8db;           --on-secondary: #243240;
+  --secondary-container: #3a4857; --on-secondary-container: #d6e4f7;
+  --tertiary: #d9bfe6;            --on-tertiary: #3b2948;
+  --tertiary-container: #533f60;  --on-tertiary-container: #f6dbff;
+  --error: #ffb4ab;               --on-error: #690005;
+  --error-container: #93000a;     --on-error-container: #ffdad6;
+
+  --surface: #101418;             --on-surface: #e3e2e6;
+  --surface-variant: #42474e;     --on-surface-variant: #c2c7cf;
+  --surface-container-lowest: #0b0f14;
+  --surface-container-low: #1a1c1e;
+  --surface-container: #1e2022;
+  --surface-container-high: #282a2d;
+  --surface-container-highest: #333538;
+  --outline: #8c9199;             --outline-variant: #42474e;
+  --inverse-surface: #e3e2e6;     --inverse-on-surface: #2f3033;
+
+  --elev-1: 0 1px 3px rgba(0,0,0,.5);
+  --elev-2: 0 2px 6px rgba(0,0,0,.55);
+  --elev-3: 0 4px 12px rgba(0,0,0,.6);
+}
+
+/* ---------- base + type scale ---------- */
+* { box-sizing: border-box; margin: 0; }
+
+body {
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: Roboto, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: 14px; line-height: 20px; letter-spacing: .25px; /* body-medium */
+  -webkit-font-smoothing: antialiased;
+}
+
+h2 { /* title-large */
+  font-size: 22px; line-height: 28px; letter-spacing: 0; font-weight: 400;
+  margin-bottom: 4px;
+}
+
+.dim { /* body-small */
+  color: var(--on-surface-variant);
+  font-size: 12px; line-height: 16px; letter-spacing: .4px;
+}
+
+code {
+  font-family: "Roboto Mono", Consolas, monospace;
+  font-size: 12px;
+  background: var(--surface-container-highest);
+  color: var(--on-surface-variant);
+  padding: 2px 6px;
+  border-radius: var(--shape-xs);
+  word-break: break-all;
+}
+
+a { color: var(--primary); cursor: pointer; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.hidden { display: none !important; }
+
+/* ---------- top app bar ---------- */
+.top-app-bar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 4px;
+  height: 64px; padding: 0 16px;
+  background: var(--surface-container);
+  color: var(--on-surface);
+}
+.top-app-bar .title { /* title-large */
+  flex: 1; font-size: 22px; line-height: 28px; font-weight: 400;
+}
+.top-app-bar .title b { color: var(--primary); font-weight: 500; }
+
+
+/* ripple, stamped by boot.js on press */
+.ripple {
+  position: absolute; border-radius: 50%; pointer-events: none;
+  background: currentColor; opacity: .16;
+  transform: scale(0); animation: ripple 450ms var(--ease-standard) forwards;
+}
+@keyframes ripple { to { transform: scale(2.4); opacity: 0; } }
+
+/* ---------- cards ---------- */
+.card {
+  background: var(--surface-container-low);
+  border-radius: var(--shape-md);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.card.elevated { box-shadow: var(--elev-1); }
+.card > h2 { margin-bottom: 16px; }
+
+/* ---------- buttons ---------- */
+.btn {
+  --btn-color: var(--primary);
+  position: relative; overflow: hidden; isolation: isolate;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 24px;
+  border: none; border-radius: var(--shape-full);
+  font: inherit; font-size: 14px; line-height: 20px; /* label-large */
+  letter-spacing: .1px; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+  color: var(--btn-color); background: transparent;
+  transition: box-shadow var(--dur-short) var(--ease-standard);
+}
+/* the M3 state layer: currentColor at 8% hover / 10% focus and press */
+.btn::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: currentColor; opacity: 0;
+  transition: opacity var(--dur-short) var(--ease-standard);
+}
+.btn:hover::before { opacity: .08; }
+.btn:focus-visible::before { opacity: .10; }
+.btn:active::before { opacity: .10; }
+.btn:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.btn:disabled { opacity: .38; pointer-events: none; }
+
+.btn.filled   { background: var(--primary); --btn-color: var(--on-primary); }
+.btn.filled:hover { box-shadow: var(--elev-1); }
+.btn.tonal    { background: var(--secondary-container); --btn-color: var(--on-secondary-container); }
+.btn.outlined { border: 1px solid var(--outline); }
+.btn.text     { padding: 0 12px; }
+.btn.danger   { --btn-color: var(--error); }
+.btn.filled.danger { background: var(--error); --btn-color: var(--on-error); }
+
+.icon-btn {
+  position: relative; overflow: hidden; isolation: isolate;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; padding: 0;
+  border: none; border-radius: var(--shape-full);
+  background: transparent; color: var(--on-surface-variant);
+  cursor: pointer;
+}
+.icon-btn::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: currentColor; opacity: 0;
+  transition: opacity var(--dur-short) var(--ease-standard);
+}
+.icon-btn:hover::before { opacity: .08; }
+.icon-btn:active::before { opacity: .10; }
+.icon-btn svg { width: 22px; height: 22px; fill: currentColor; }
+
+/* ---------- filled text fields ---------- */
+/* Filled rather than outlined: the label lives inside the container, so a
+   field drops onto any surface without needing a notch cut into a border. */
+.field {
+  position: relative; display: flex; flex-direction: column;
+  flex: 1; min-width: 180px;
+}
+.field > input,
+.field > select,
+.field > textarea {
+  width: 100%;
+  background: var(--surface-container-highest);
+  color: var(--on-surface);
+  border: none;
+  border-bottom: 1px solid var(--on-surface-variant);
+  border-radius: var(--shape-xs) var(--shape-xs) 0 0;
+  padding: 22px 16px 6px;
+  font: inherit; font-size: 16px; line-height: 24px; letter-spacing: .5px;
+  transition: border-color var(--dur-short) var(--ease-standard);
+}
+.field > textarea {
+  min-height: 140px; resize: vertical;
+  font-family: "Roboto Mono", Consolas, monospace;
+  font-size: 13px; line-height: 20px;
+}
+.field > input:focus,
+.field > select:focus,
+.field > textarea:focus {
+  outline: none;
+  border-bottom-width: 2px;
+  border-bottom-color: var(--primary);
+  padding-bottom: 5px; /* hold the text still as the indicator thickens */
+}
+.field > .label {
+  position: absolute; left: 16px; top: 14px;
+  color: var(--on-surface-variant);
+  font-size: 16px; line-height: 24px; letter-spacing: .5px;
+  pointer-events: none; transform-origin: left top;
+  transition: transform var(--dur-short) var(--ease-standard),
+              color var(--dur-short) var(--ease-standard);
+}
+/* float on focus, or whenever the control holds a value */
+.field > input:focus ~ .label,
+.field > input:not(:placeholder-shown) ~ .label,
+.field > textarea:focus ~ .label,
+.field > textarea:not(:placeholder-shown) ~ .label,
+.field > select ~ .label,
+.field > input[type="file"] ~ .label,
+.field > input[type="number"] ~ .label {
+  transform: translateY(-10px) scale(.75);
+}
+.field > input:focus ~ .label,
+.field > textarea:focus ~ .label,
+.field > select:focus ~ .label { color: var(--primary); }
+
+.field.compact { flex: 0 0 auto; min-width: 0; }
+.field > select {
+  appearance: none; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 20px top 26px, right 15px top 26px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.field > input[type="file"] { padding-top: 20px; font-size: 13px; }
+
+/* read-only output areas carry no label */
+.plain-area {
+  width: 100%;
+  background: var(--surface-container-highest);
+  color: var(--on-surface);
+  border: none; border-bottom: 1px solid var(--on-surface-variant);
+  border-radius: var(--shape-xs) var(--shape-xs) 0 0;
+  padding: 12px 16px;
+  font-family: "Roboto Mono", Consolas, monospace;
+  font-size: 13px; line-height: 20px;
+  min-height: 120px; resize: vertical;
+}
+.plain-area:focus { outline: none; border-bottom: 2px solid var(--primary); }
+
+/* ---------- checkbox ---------- */
+.check {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: var(--on-surface-variant);
+  font-size: 14px; line-height: 20px; letter-spacing: .1px;
+  white-space: nowrap; cursor: pointer; user-select: none;
+}
+.check input {
+  appearance: none; margin: 0; position: relative;
+  width: 18px; height: 18px; flex: 0 0 18px;
+  border: 2px solid var(--on-surface-variant);
+  border-radius: 2px; cursor: pointer;
+  transition: background var(--dur-short) var(--ease-standard),
+              border-color var(--dur-short) var(--ease-standard);
+}
+.check input:checked { background: var(--primary); border-color: var(--primary); }
+.check input:checked::after {
+  content: ""; position: absolute; left: 4px; top: 0;
+  width: 5px; height: 10px;
+  border: solid var(--on-primary); border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.check input:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* ---------- tabs: secondary style with an active indicator ---------- */
+.tabs {
+  display: flex; overflow-x: auto;
+  border-bottom: 1px solid var(--outline-variant);
+  margin-bottom: 20px;
+}
+.tabs button {
+  position: relative; overflow: hidden; isolation: isolate;
+  flex: 0 0 auto; height: 48px; padding: 0 16px;
+  border: none; background: transparent;
+  color: var(--on-surface-variant);
+  font: inherit; font-size: 14px; line-height: 20px;
+  letter-spacing: .1px; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+  transition: color var(--dur-short) var(--ease-standard);
+}
+.tabs button::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: currentColor; opacity: 0;
+  transition: opacity var(--dur-short) var(--ease-standard);
+}
+.tabs button:hover::before { opacity: .08; }
+.tabs button::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+  height: 3px; border-radius: 3px 3px 0 0; background: var(--primary);
+  transform: scaleX(0);
+  transition: transform var(--dur-medium) var(--ease-emphasized);
+}
+.tabs button.on { color: var(--primary); }
+.tabs button.on::after { transform: scaleX(1); }
+
+/* ---------- data table ---------- */
+table { width: 100%; border-collapse: collapse; }
+th, td {
+  text-align: left; padding: 12px 16px;
+  border-bottom: 1px solid var(--outline-variant);
+  vertical-align: middle;
+}
+th { /* label-medium */
+  height: 56px; color: var(--on-surface-variant);
+  font-size: 12px; line-height: 16px; letter-spacing: .5px; font-weight: 500;
+}
+td { font-size: 14px; line-height: 20px; letter-spacing: .25px; }
+tbody tr { transition: background var(--dur-short) var(--ease-standard); }
+tbody tr:hover { background: color-mix(in srgb, var(--on-surface) 5%, transparent); }
+tbody tr:last-child td { border-bottom: none; }
+
+/* ---------- assist chip / status badge ---------- */
+.badge {
+  display: inline-flex; align-items: center;
+  height: 24px; padding: 0 10px;
+  border-radius: var(--shape-sm);
+  background: var(--secondary-container); color: var(--on-secondary-container);
+  font-size: 12px; line-height: 16px; letter-spacing: .5px; font-weight: 500;
+}
+.badge.error { background: var(--error-container); color: var(--on-error-container); }
+.badge.ok    { background: var(--primary-container); color: var(--on-primary-container); }
+
+/* ---------- snackbar ---------- */
+#toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translate(-50%, 12px);
+  min-height: 48px; max-width: min(560px, calc(100vw - 32px));
+  display: flex; align-items: center;
+  padding: 14px 16px;
+  background: var(--inverse-surface); color: var(--inverse-on-surface);
+  border-radius: var(--shape-xs);
+  box-shadow: var(--elev-3);
+  font-size: 14px; line-height: 20px; letter-spacing: .25px;
+  opacity: 0; pointer-events: none; z-index: 100;
+  transition: opacity var(--dur-medium) var(--ease-emphasized),
+              transform var(--dur-medium) var(--ease-emphasized);
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- layout helpers ---------- */
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.row.between { justify-content: space-between; }
+
+.login-card {
+  max-width: 400px; margin: 48px auto;
+  background: var(--surface-container-low);
+  border-radius: var(--shape-xl);
+  box-shadow: var(--elev-2);
+  padding: 32px;
+}
+.login-card h2 { margin-bottom: 20px; }
+.login-card .field { margin-bottom: 16px; }
+
+#statsChart { display: flex; align-items: flex-end; gap: 4px; height: 160px; margin-top: 16px; }
+#statsChart div {
+  flex: 1; background: var(--primary);
+  border-radius: var(--shape-xs) var(--shape-xs) 0 0;
+  transition: opacity var(--dur-short) var(--ease-standard);
+}
+
+@media (max-width: 640px) {
+  .wrap { padding: 16px 12px 48px; }
+  .card { padding: 16px; }
+  .top-app-bar { height: 56px; padding: 0 8px; }
+  .top-app-bar .title { font-size: 18px; }
+  th, td { padding: 10px 12px; }
+}
