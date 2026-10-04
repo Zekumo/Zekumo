@@ -70,6 +70,20 @@ async function waitForRecovery() {
   throw new Error("server readiness did not recover after Redis restart");
 }
 
+async function waitForOutage() {
+  const deadline = Date.now() + timeoutMs * 3;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(base + "/readyz");
+      if (!response.ok) return;
+    } catch {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("server readiness stayed healthy after Redis shutdown");
+}
+
 function sdk(appId, token) {
   const client = new MiniCloud({appId, baseUrl: base, token});
   clients.add(client);
@@ -119,7 +133,7 @@ try {
   await bobSDK.realtime.joinRoom(room.id);
 
   await stopRedis();
-  await new Promise((resolve) => setTimeout(resolve, 2500));
+  await waitForOutage();
 
   const localMessage = waitRealtime(
     aliceSDK.realtime,

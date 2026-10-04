@@ -185,7 +185,7 @@ jobs:
             IF (SELECT recipient_count FROM mail_messages WHERE id='00000000-0000-0000-0000-000000000031') <> 1 THEN RAISE EXCEPTION 'mail backfill'; END IF;
             IF (SELECT balance FROM currency_balances WHERE player_id='00000000-0000-0000-0000-000000000011') <> 42 THEN RAISE EXCEPTION 'balance preservation'; END IF;
             IF (SELECT count(*) FROM friendships) <> 1 THEN RAISE EXCEPTION 'friendship preservation'; END IF;
-            IF (SELECT count(*) FROM retention_daily WHERE d1 IS NULL AND d7 IS NULL AND d30 IS NULL) <> 1 THEN RAISE EXCEPTION 'retention invalidation'; END IF;
+            IF (SELECT count(*) FROM retention_daily WHERE date=current_date-40 AND d1 IS NULL AND d7 IS NULL AND d30 IS NULL) <> 1 THEN RAISE EXCEPTION 'retention invalidation'; END IF;
           END $$;
           SQL
           MINICLOUD_ADDR=127.0.0.1:18081 BASE_URL=http://127.0.0.1:18081 \
@@ -204,6 +204,8 @@ jobs:
 
   cluster-and-recovery:
     runs-on: ubuntu-latest
+    env:
+      REDIS_ADDR: 127.0.0.1:16379
     services:
       postgres:
         image: postgres:16
@@ -231,9 +233,9 @@ jobs:
           cat >/tmp/start-redis.sh <<'SH'
           #!/usr/bin/env bash
           set -e
-          if redis-cli ping 2>/dev/null | grep -q PONG; then exit 0; fi
-          redis-server --daemonize yes --save '' --appendonly no --bind 127.0.0.1 --port 6379
-          for i in {1..50}; do redis-cli ping | grep -q PONG && exit 0; sleep .1; done
+          if redis-cli -p 16379 ping 2>/dev/null | grep -q PONG; then exit 0; fi
+          redis-server --daemonize yes --save '' --appendonly no --bind 127.0.0.1 --port 16379 --pidfile /tmp/minicloud-ci-redis.pid
+          for i in {1..50}; do redis-cli -p 16379 ping | grep -q PONG && exit 0; sleep .1; done
           exit 1
           SH
           chmod +x /tmp/start-redis.sh
@@ -263,6 +265,7 @@ jobs:
           MINICLOUD_A: http://127.0.0.1:18081
           MINICLOUD_REDIS_OUTAGE: "1"
           REDIS_START_SCRIPT: /tmp/start-redis.sh
+          REDIS_PORT: "16379"
           CLUSTER_TEST_TIMEOUT_MS: "10000"
         run: node tests/acceptance/redis-outage-ws.mjs
       - name: Stop fixtures and print logs
@@ -271,6 +274,6 @@ jobs:
           for pidfile in /tmp/cluster-a.pid /tmp/cluster-b.pid; do
             test ! -f "$pidfile" || kill -TERM "$(cat "$pidfile")" || true
           done
-          redis-cli shutdown nosave || true
+          redis-cli -p 16379 shutdown nosave || true
           tail -100 /tmp/cluster-a.log || true
           tail -100 /tmp/cluster-b.log || true
