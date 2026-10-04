@@ -1,4 +1,4 @@
-// Command smoketest exercises every MiniCloud API end to end against a
+// Command smoketest exercises every Zekumo API end to end against a
 // running server. Each phase lives in its own file and receives the shared
 // state (tokens and ids) established by the phases before it.
 package main
@@ -45,11 +45,11 @@ type acctRes struct {
 }
 
 func main() {
-	fmt.Println("== MiniCloud smoke test ==")
+	fmt.Println("== Zekumo smoke test ==")
 	s := &state{}
 	phaseCore(s)
 
-	if env("MINICLOUD_PHASE2_ONLY", "") == "true" {
+	if env("ZEKUMO_PHASE2_ONLY", "") == "true" {
 		phaseFriends(s)
 		phaseAchievements(s)
 		phaseAnnouncements(s)

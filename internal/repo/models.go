@@ -38,7 +38,7 @@ type Player struct {
 	PasswordHash string `json:"-"`
 }
 
-// Account is a platform-wide identity (MiniCloud 通行证).
+// Account is a platform-wide identity (Zekumo 通行证).
 type Account struct {
 	ID          string    `json:"id"`
 	Username    string    `json:"username"`

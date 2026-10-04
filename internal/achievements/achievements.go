@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 // Emitter publishes platform events; nil disables emission.

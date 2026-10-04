@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
-	"minicloud/internal/realtime"
-	"minicloud/internal/repo"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
+	"zekumo/internal/realtime"
+	"zekumo/internal/repo"
 )
 
 // Handler exposes the developer console API: manage games, inspect players,

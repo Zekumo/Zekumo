@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"time"
 
-	"minicloud/internal/httpx"
+	"zekumo/internal/httpx"
 )
 
 // Version is stamped at build time:
 //
-//	go build -ldflags "-X minicloud/internal/server.Version=$(git describe --tags)"
+//	go build -ldflags "-X zekumo/internal/server.Version=$(git describe --tags)"
 //
 // It surfaces in /readyz and the console's platform status, so an operator can
 // tell which build a given instance is actually running.

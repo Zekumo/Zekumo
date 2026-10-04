@@ -1,7 +1,7 @@
 {
-  "name": "minicloud-sdk",
+  "name": "zekumo-sdk",
   "version": "0.1.0",
-  "description": "Official JavaScript/TypeScript SDK for MiniCloud, the mini-game BaaS platform",
+  "description": "Official JavaScript/TypeScript SDK for Zekumo, the mini-game BaaS platform",
   "license": "MIT",
   "type": "module",
   "main": "./dist/cjs/index.js",

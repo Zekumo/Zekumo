@@ -1,4 +1,4 @@
-# MiniCloud — 小游戏后端即服务(BaaS)
+# Zekumo — 小游戏后端即服务(BaaS)
 
 面向小游戏(H5 / 微信小游戏 / 独立小品游戏)的多租户后端平台,用 Go 实现。
 一个服务同时给多款游戏提供:玩家认证、玩家数据(存档)、排行榜、剧情对话数据、
@@ -31,13 +31,13 @@
 .\scripts\dev-deps.ps1
 
 # 2. 启动服务(8080 被占用时换端口)
-$env:MINICLOUD_ADDR = ":8090"
+$env:ZEKUMO_ADDR = ":8090"
 $env:BANNED_WORDS_FILE = "$PWD\configs\banned_words.txt"
 go run ./cmd/server
 
 # 3. 跑端到端冒烟测试(覆盖全部 API + WebSocket)
-$env:MINICLOUD_URL = "http://localhost:8090"
-$env:MINICLOUD_WS  = "ws://localhost:8090"
+$env:ZEKUMO_URL = "http://localhost:8090"
+$env:ZEKUMO_WS  = "ws://localhost:8090"
 go run ./cmd/smoketest
 ```
 
@@ -54,7 +54,7 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 
 `docker-compose.yml` 是本地开发用的(有默认口令、端口直接暴露)。
 生产用 `docker-compose.prod.yml`,区别是:机密没有默认值、缺失即启动失败;
-`MINICLOUD_ENV=production`;应用端口只绑 `127.0.0.1`(TLS 由你前面的
+`ZEKUMO_ENV=production`;应用端口只绑 `127.0.0.1`(TLS 由你前面的
 Nginx / Caddy / CDN 终止);数据库和 Redis 不对外暴露;带重启策略、
 健康检查、内存上限和日志轮转。
 
@@ -64,7 +64,7 @@ Nginx / Caddy / CDN 终止);数据库和 Redis 不对外暴露;带重启策略�
 
 - [ ] `.env` 里设好 `JWT_SECRET`(≥32 字符随机值)、`ADMIN_PASSWORD`、`POSTGRES_PASSWORD`
 - [ ] `BASE_URL` 填真实域名(填 localhost 会让客户端下载不到更新产物)
-- [ ] `MINICLOUD_ENV=production` —— 上面几项没改好时它会**拒绝启动**,而不是打个日志继续跑
+- [ ] `ZEKUMO_ENV=production` —— 上面几项没改好时它会**拒绝启动**,而不是打个日志继续跑
 - [ ] 反代终止 TLS,并且**覆写** `X-Forwarded-For`;确认 `TRUST_PROXY=true`
       (不开的话所有请求的来源 IP 都是反代 IP,按 IP 限流形同虚设;
       反代不覆写头就开,任何人都能伪造来源绕过限流)
@@ -88,7 +88,7 @@ readiness 指 `/readyz`。
 - [ ] 控制台仪表盘顶部**没有**红色的「部署尚未加固」横幅(有就说明还在用默认凭据)
 - [ ] 「平台状态」卡片里 Postgres / Redis 都是正常、版本号是你部署的那个
 - [ ] 跑一遍冒烟测试打到线上环境(会创建并删除一个临时游戏):
-      `MINICLOUD_URL=https://api.example.com go run ./cmd/smoketest`
+      `ZEKUMO_URL=https://api.example.com go run ./cmd/smoketest`
       注意:出站 HTTP 那几步依赖 `FUNC_HTTP_ALLOW_PRIVATE`,生产环境下会失败,属预期
 
 **版本号**:构建时用 ldflags 打进二进制,`/readyz` 和控制台都会显示,
@@ -97,7 +97,7 @@ readiness 指 `/readyz`。
 ```bash
 docker build --build-arg VERSION=$(git describe --tags --always) .
 # 或直接 go build
-go build -ldflags "-X minicloud/internal/server.Version=$(git describe --tags --always)" ./cmd/server
+go build -ldflags "-X zekumo/internal/server.Version=$(git describe --tags --always)" ./cmd/server
 ```
 
 **关于优雅关闭**:收到 SIGTERM 后先停止接受新连接、等在途请求结束,
@@ -107,9 +107,9 @@ go build -ldflags "-X minicloud/internal/server.Version=$(git describe --tags --
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `MINICLOUD_ENV` | `development` | 设为 `production` 时,不安全的配置会让服务**拒绝启动**而不是仅告警 |
-| `MINICLOUD_ADDR` | `:8080` | 监听地址 |
-| `DATABASE_URL` | `postgres://minicloud:minicloud@localhost:5432/minicloud` | Postgres 连接串(启动时自动跑迁移) |
+| `ZEKUMO_ENV` | `development` | 设为 `production` 时,不安全的配置会让服务**拒绝启动**而不是仅告警 |
+| `ZEKUMO_ADDR` | `:8080` | 监听地址 |
+| `DATABASE_URL` | `postgres://zekumo:zekumo@localhost:5432/zekumo` | Postgres 连接串(启动时自动跑迁移) |
 | `REDIS_ADDR` | `localhost:6379` | Redis 地址 |
 | `JWT_SECRET` | `dev-secret-change-me` | 令牌签名密钥,**生产必须改** |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `admin` / `admin123` | 控制台账号,**生产必须改** |
@@ -248,9 +248,9 @@ DELETE /v1/kv/{namespace}/{key}              删除(app_secret 签名)
 写入要带三个请求头(时间戳防重放,窗口 ±5 分钟):
 
 ```
-X-MC-App-Id:     mc_xxx
-X-MC-Timestamp:  1758880000                  unix 秒
-X-MC-Signature:  sha256=<hex>                HMAC-SHA256(app_secret, "{ts}.{method}.{path}.{body}")
+X-Zekumo-App-Id:     zk_xxx
+X-Zekumo-Timestamp:  1758880000                  unix 秒
+X-Zekumo-Signature:  sha256=<hex>                HMAC-SHA256(app_secret, "{ts}.{method}.{path}.{body}")
 ```
 
 签名串是**时间戳、方法、路径、body 用 `.` 连接**(DELETE 的 body 为空):
@@ -258,8 +258,8 @@ X-MC-Signature:  sha256=<hex>                HMAC-SHA256(app_secret, "{ts}.{meth
 ```bash
 TS=$(date +%s); BODY='{"double_drop":true}'; PATH_='/v1/kv/public/event'
 SIG=$(printf '%s.PUT.%s.%s' "$TS" "$PATH_" "$BODY" | openssl dgst -sha256 -hmac "$APP_SECRET" -hex | awk '{print $2}')
-curl -X PUT "$BASE$PATH_" -H "X-MC-App-Id: $APP_ID" -H "X-MC-Timestamp: $TS" \
-     -H "X-MC-Signature: sha256=$SIG" -d "$BODY"
+curl -X PUT "$BASE$PATH_" -H "X-Zekumo-App-Id: $APP_ID" -H "X-Zekumo-Timestamp: $TS" \
+     -H "X-Zekumo-Signature: sha256=$SIG" -d "$BODY"
 ```
 
 ### 检查更新(无需令牌 —— 更新器在登录之前运行)
@@ -322,7 +322,7 @@ GET  /sso/authorize           托管登录页(浏览器打开)
 
 ## OAuth2 授权(`/oauth`)
 
-让第三方应用"用 MiniCloud 通行证登录"。控制台创建 OAuth 应用得到 `client_id`
+让第三方应用"用 Zekumo 通行证登录"。控制台创建 OAuth 应用得到 `client_id`
 (机密客户端另有 `client_secret`;公开客户端强制 PKCE)。标准授权码流程:
 
 ```
@@ -388,8 +388,8 @@ else {
 
 - 事件:`player.registered`、`player.login`、`player.banned`、`player.unbanned`、`leaderboard.score`、`achievement.unlocked`、`release.published`
   (可订阅子集,`*` 表示全部)
-- 请求体:`{event, game_id, timestamp, data}`;头部 `X-MiniCloud-Event` 和
-  `X-MiniCloud-Signature: sha256=<HMAC-SHA256(secret, body)>`,**收到后必须验签**
+- 请求体:`{event, game_id, timestamp, data}`;头部 `X-Zekumo-Event` 和
+  `X-Zekumo-Signature: sha256=<HMAC-SHA256(secret, body)>`,**收到后必须验签**
 - 接收地址与云函数出站共用同一套地址校验,内网地址不可达(否则 WebHook 会变成内网探测器)
 - 控制台可发测试事件、查看最近 50 条投递记录(状态码/尝试次数)
 
@@ -473,7 +473,7 @@ const BASE = "https://你的域名";
 // 登录
 const { token } = await fetch(`${BASE}/v1/auth/login`, {
   method: "POST",
-  body: JSON.stringify({ app_id: "mc_xxx", provider: "guest", device_id: myDeviceId }),
+  body: JSON.stringify({ app_id: "zk_xxx", provider: "guest", device_id: myDeviceId }),
 }).then(r => r.json());
 
 // 存档

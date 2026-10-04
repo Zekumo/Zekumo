@@ -84,10 +84,10 @@ func (c Config) Validate() (problems []string) {
 
 func FromEnv() Config {
 	return Config{
-		Env:             getenv("MINICLOUD_ENV", "development"),
-		Addr:            getenv("MINICLOUD_ADDR", ":8080"),
+		Env:             getenv("ZEKUMO_ENV", "development"),
+		Addr:            getenv("ZEKUMO_ADDR", ":8080"),
 		BaseURL:         getenv("BASE_URL", "http://localhost:8080"),
-		DatabaseURL:     getenv("DATABASE_URL", "postgres://minicloud:minicloud@localhost:5432/minicloud"),
+		DatabaseURL:     getenv("DATABASE_URL", "postgres://zekumo:zekumo@localhost:5432/zekumo"),
 		RedisAddr:       getenv("REDIS_ADDR", "localhost:6379"),
 		JWTSecret:       getenv("JWT_SECRET", DefaultJWTSecret),
 		AdminUser:       getenv("ADMIN_USERNAME", "admin"),

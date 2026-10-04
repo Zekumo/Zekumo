@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"minicloud/internal/repo"
+	"zekumo/internal/repo"
 )
 
 var (
@@ -79,7 +79,7 @@ func (p GuestProvider) Authenticate(ctx context.Context, gameID string, creds Cr
 
 // dummyHash keeps password checks constant-time when the user does not exist,
 // so response timing cannot reveal whether a username is registered.
-var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("minicloud-timing-pad"), bcrypt.DefaultCost)
+var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("zekumo-timing-pad"), bcrypt.DefaultCost)
 
 // BurnPasswordCheck spends one bcrypt comparison on a nonexistent user's
 // password attempt, equalizing timing with the user-exists path.

@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
-	"minicloud/internal/storage"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
+	"zekumo/internal/storage"
 )
 
 var (

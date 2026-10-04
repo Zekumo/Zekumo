@@ -5,7 +5,7 @@
 // anyone holding it can rewrite every game's config. Use Signer from your own
 // game server, a CI job, or an ops tool.
 //
-//	sg := minicloud.NewSigner("https://api.example.com", appID, appSecret)
+//	sg := zekumo.NewSigner("https://api.example.com", appID, appSecret)
 //	sg.Put(ctx, "public", "event", map[string]any{"double_drop": true}, 0)
 //	sg.Put(ctx, "public", "flash_sale", cfg, 2*time.Hour)  // auto-expires
 //	sg.Delete(ctx, "public", "event")
@@ -16,7 +16,7 @@
 // later. A clock more than 5 minutes off is the usual cause of a rejected
 // signature.
 
-package minicloud
+package zekumo
 
 import (
 	"bytes"
@@ -86,18 +86,18 @@ func (s *Signer) do(ctx context.Context, method, target string, body []byte, out
 	}
 	req, err := http.NewRequestWithContext(ctx, method, s.baseURL+target, reader)
 	if err != nil {
-		return fmt.Errorf("minicloud: build request: %w", err)
+		return fmt.Errorf("zekumo: build request: %w", err)
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("X-MC-App-Id", s.appID)
-	req.Header.Set("X-MC-Timestamp", ts)
-	req.Header.Set("X-MC-Signature", s.sign(ts, method, path, body))
+	req.Header.Set("X-Zekumo-App-Id", s.appID)
+	req.Header.Set("X-Zekumo-Timestamp", ts)
+	req.Header.Set("X-Zekumo-Signature", s.sign(ts, method, path, body))
 
 	res, err := s.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("minicloud: %s %s: %w", method, path, err)
+		return fmt.Errorf("zekumo: %s %s: %w", method, path, err)
 	}
 	defer res.Body.Close()
 
@@ -116,17 +116,17 @@ func (s *Signer) do(ctx context.Context, method, target string, body []byte, out
 func (s *Signer) Put(ctx context.Context, namespace, key string, value any, ttl time.Duration) error {
 	body, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf("minicloud: encode value: %w", err)
+		return fmt.Errorf("zekumo: encode value: %w", err)
 	}
 	if len(body) > maxKVValue {
-		return fmt.Errorf("minicloud: value is %d bytes, over the 64KB limit", len(body))
+		return fmt.Errorf("zekumo: value is %d bytes, over the 64KB limit", len(body))
 	}
 
 	path := "/v1/kv/" + esc(namespace) + "/" + esc(key)
 	if ttl > 0 {
 		secs := int64(ttl.Seconds())
 		if secs < 1 || secs > maxKVTTL {
-			return fmt.Errorf("minicloud: ttl must be between 1s and 365 days, got %s", ttl)
+			return fmt.Errorf("zekumo: ttl must be between 1s and 365 days, got %s", ttl)
 		}
 		path += "?ttl=" + strconv.FormatInt(secs, 10)
 	}

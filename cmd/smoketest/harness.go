@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	base   = env("MINICLOUD_URL", "http://localhost:8080")
-	wsBase = env("MINICLOUD_WS", "ws://localhost:8080")
+	base   = env("ZEKUMO_URL", "http://localhost:8080")
+	wsBase = env("ZEKUMO_WS", "ws://localhost:8080")
 	failed = 0
 )
 
@@ -120,5 +120,5 @@ func boolErr(ok bool, format string, args ...any) error {
 }
 
 // rebase points local-driver storage URLs (path /storage/...) at the server
-// under test, since BASE_URL inside the server may differ from MINICLOUD_URL.
+// under test, since BASE_URL inside the server may differ from ZEKUMO_URL.
 // S3 presigned URLs pass through untouched.

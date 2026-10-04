@@ -22,7 +22,7 @@ func randomHex(n int) string {
 
 func (g Games) Create(ctx context.Context, name string) (*Game, error) {
 	game := &Game{
-		AppID:     "mc_" + randomHex(6),
+		AppID:     "zk_" + randomHex(6),
 		AppSecret: randomHex(24),
 		Name:      name,
 	}

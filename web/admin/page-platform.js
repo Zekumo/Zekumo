@@ -67,7 +67,7 @@ async function renderOAuth(host) {
   const { clients } = await api('GET', '/admin/api/oauth/clients');
   pageShell(host, {
     title: 'OAuth 应用',
-    subtitle: '第三方应用用 MiniCloud 通行证登录。公开客户端(无 secret)强制使用 PKCE。',
+    subtitle: '第三方应用用 Zekumo 通行证登录。公开客户端(无 secret)强制使用 PKCE。',
     actions: `<button class="btn filled" onclick="newOAuthDialog()">创建应用</button>`,
     body: clients.length ? `<div class="card table-card"><table>
       <thead><tr><th>名称</th><th>Client ID</th><th>Client Secret</th><th>回跳白名单</th><th>创建</th><th></th></tr></thead>

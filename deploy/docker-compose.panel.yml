@@ -7,24 +7,24 @@
 #
 # 用法见同目录 README.md。环境变量从 .env 读取,和本文件放同一目录。
 
-name: minicloud
+name: zekumo
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: minicloud-postgres
+    container_name: zekumo-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: minicloud
+      POSTGRES_USER: zekumo
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必填}
-      POSTGRES_DB: minicloud
+      POSTGRES_DB: zekumo
       # 中文数据的排序与比较规则
       LANG: C.UTF-8
     volumes:
       - pgdata:/var/lib/postgresql/data
     # 不映射端口:只有本编排内的服务能连,外网和其他容器都碰不到
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U minicloud"]
+      test: ["CMD-SHELL", "pg_isready -U zekumo"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -37,7 +37,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: minicloud-redis
+    container_name: zekumo-redis
     restart: unless-stopped
     # noeviction:排行榜和限流计数不能被当缓存淘汰掉。
     # appendonly:重启后不必从 Postgres 全量重建排行榜。
@@ -61,15 +61,15 @@ services:
       context: ./src
       args:
         VERSION: ${VERSION:-1.0.0}
-    image: minicloud:${VERSION:-1.0.0}
-    container_name: minicloud-server
+    image: zekumo:${VERSION:-1.0.0}
+    container_name: zekumo-server
     restart: unless-stopped
     # 只绑回环:公网流量必须经过面板的 Nginx,不能直连应用端口。
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      MINICLOUD_ENV: production
-      DATABASE_URL: postgres://minicloud:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必填}@postgres:5432/minicloud
+      ZEKUMO_ENV: production
+      DATABASE_URL: postgres://zekumo:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必填}@postgres:5432/zekumo
       REDIS_ADDR: redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 必填}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}

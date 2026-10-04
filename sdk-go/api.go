@@ -10,7 +10,7 @@
 // list: adding a field later does not break existing call sites, and a zero
 // value reliably means "not set" (the query builder drops empties).
 
-package minicloud
+package zekumo
 
 import (
 	"context"

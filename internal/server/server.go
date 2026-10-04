@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"minicloud/internal/config"
-	"minicloud/internal/httpx"
-	"minicloud/internal/logs"
-	"minicloud/internal/storage"
-	"minicloud/internal/store"
+	"zekumo/internal/config"
+	"zekumo/internal/httpx"
+	"zekumo/internal/logs"
+	"zekumo/internal/storage"
+	"zekumo/internal/store"
 )
 
 // New builds the HTTP handler. ctx bounds every background worker the platform

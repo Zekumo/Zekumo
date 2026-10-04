@@ -2,13 +2,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: minicloud
-      POSTGRES_PASSWORD: minicloud
-      POSTGRES_DB: minicloud
+      POSTGRES_USER: zekumo
+      POSTGRES_PASSWORD: zekumo
+      POSTGRES_DB: zekumo
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U minicloud"]
+      test: ["CMD-SHELL", "pg_isready -U zekumo"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -29,7 +29,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      DATABASE_URL: postgres://minicloud:minicloud@postgres:5432/minicloud
+      DATABASE_URL: postgres://zekumo:zekumo@postgres:5432/zekumo
       REDIS_ADDR: redis:6379
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}

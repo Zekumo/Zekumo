@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 const (

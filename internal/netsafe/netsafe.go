@@ -1,5 +1,5 @@
 // Package netsafe builds HTTP clients that refuse to reach non-public
-// addresses. It exists because MiniCloud makes outbound requests on behalf of
+// addresses. It exists because Zekumo makes outbound requests on behalf of
 // tenants (cloud functions, webhooks), and those must never be usable to probe
 // the platform's own network.
 package netsafe

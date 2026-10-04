@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 type ctxKey struct{}

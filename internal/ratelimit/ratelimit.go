@@ -14,7 +14,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"minicloud/internal/httpx"
+	"zekumo/internal/httpx"
 )
 
 // Limiter counts events per fixed window. Fixed windows allow a burst at a

@@ -7,9 +7,9 @@ import (
 	"errors"
 	"net/http"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 // OnlineChecker reports whether a player is currently connected via WebSocket.

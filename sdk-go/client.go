@@ -1,9 +1,9 @@
 // client.go is the SDK's entry point and its only HTTP plumbing: build a
 // Client, hand it credentials, and every API group hangs off it.
 //
-//	mc := minicloud.New(minicloud.Options{AppID: "mc_xxx", BaseURL: "https://api.example.com"})
+//	mc := zekumo.New(zekumo.Options{AppID: "zk_xxx", BaseURL: "https://api.example.com"})
 //	if _, err := mc.Auth.LoginAsGuest(ctx, deviceID, "Player1"); err != nil { ... }
-//	boards, err := mc.Leaderboards.Top(ctx, "weekly", minicloud.TopOptions{Limit: 10})
+//	boards, err := mc.Leaderboards.Top(ctx, "weekly", zekumo.TopOptions{Limit: 10})
 //
 // The token lives here rather than in the caller: login stores it, every
 // later request picks it up, and Logout clears it. A desktop game has a
@@ -11,7 +11,7 @@
 // token is mutex-guarded — reading a string while another goroutine assigns
 // it is a data race Go will flag under -race.
 
-package minicloud
+package zekumo
 
 import (
 	"bytes"
@@ -134,7 +134,7 @@ func (c *Client) BaseURL() string { return c.baseURL }
 // readable string — branch on that, never on Message, which is prose and may
 // be reworded.
 //
-//	var apiErr *minicloud.Error
+//	var apiErr *zekumo.Error
 //	if errors.As(err, &apiErr) && apiErr.Code == "insufficient_funds" {
 //	    showShop()
 //	}
@@ -145,7 +145,7 @@ type Error struct {
 }
 
 func (e *Error) Error() string {
-	return fmt.Sprintf("minicloud: %s (%s, HTTP %d)", e.Message, e.Code, e.Status)
+	return fmt.Sprintf("zekumo: %s (%s, HTTP %d)", e.Message, e.Code, e.Status)
 }
 
 // IsCode reports whether err is an API error with the given code. It saves
@@ -198,14 +198,14 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, aut
 	if body != nil {
 		raw, err := json.Marshal(body)
 		if err != nil {
-			return fmt.Errorf("minicloud: encode request: %w", err)
+			return fmt.Errorf("zekumo: encode request: %w", err)
 		}
 		reader = bytes.NewReader(raw)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
 	if err != nil {
-		return fmt.Errorf("minicloud: build request: %w", err)
+		return fmt.Errorf("zekumo: build request: %w", err)
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -218,7 +218,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, aut
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("minicloud: %s %s: %w", method, path, err)
+		return fmt.Errorf("zekumo: %s %s: %w", method, path, err)
 	}
 	defer res.Body.Close()
 
@@ -229,7 +229,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, aut
 		return nil
 	}
 	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
-		return fmt.Errorf("minicloud: decode %s %s: %w", method, path, err)
+		return fmt.Errorf("zekumo: decode %s %s: %w", method, path, err)
 	}
 	return nil
 }

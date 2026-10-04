@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
-	"minicloud/internal/safego"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
+	"zekumo/internal/safego"
 )
 
 const maxMessageLen = 500

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"minicloud/internal/httpx"
+	"zekumo/internal/httpx"
 )
 
 // Health is the platform's own condition, as opposed to game activity: are

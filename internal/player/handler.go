@@ -5,9 +5,9 @@ import (
 	"errors"
 	"net/http"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 const maxValueSize = 256 << 10 // 256KB per save slot

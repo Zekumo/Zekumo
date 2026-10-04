@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
-	"minicloud/internal/netsafe"
-	"minicloud/internal/repo"
-	"minicloud/internal/safego"
+	"zekumo/internal/netsafe"
+	"zekumo/internal/repo"
+	"zekumo/internal/safego"
 )
 
 const (
@@ -160,8 +160,8 @@ func (b *Bus) post(hook repo.Webhook, j job) int {
 	mac := hmac.New(sha256.New, []byte(hook.Secret))
 	mac.Write(j.payload)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-MiniCloud-Event", j.event)
-	req.Header.Set("X-MiniCloud-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	req.Header.Set("X-Zekumo-Event", j.event)
+	req.Header.Set("X-Zekumo-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
 	res, err := b.client.Do(req)
 	if err != nil {
 		return 0

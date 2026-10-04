@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>授权 · MiniCloud 通行证</title>
+<title>授权 · Zekumo 通行证</title>
 <style>
   :root { --bg:#0f1420; --panel:#1a2233; --line:#2a3550; --text:#e6ebf5; --dim:#8b96ad; --accent:#4f8cff; --danger:#e05b5b; }
   * { box-sizing:border-box; margin:0; }
@@ -29,7 +29,7 @@
 </head>
 <body>
 <div class="card">
-  <h1><span>MiniCloud</span> 通行证授权</h1>
+  <h1><span>Zekumo</span> 通行证授权</h1>
   <p class="sub" id="subtitle">正在加载…</p>
 
   <div id="loginBox" style="display:none">
@@ -62,7 +62,7 @@ const state = params.get('state') || '';
 const scope = params.get('scope') || 'profile';
 const codeChallenge = params.get('code_challenge') || '';
 const codeChallengeMethod = params.get('code_challenge_method') || '';
-let accountToken = localStorage.getItem('mc_account_token') || '';
+let accountToken = localStorage.getItem('zk_account_token') || '';
 let mode = 'login';
 
 const scopeNames = { profile: '读取你的用户名和昵称' };
@@ -123,7 +123,7 @@ async function doLogin() {
     const data = await res.json();
     if (!res.ok) { err.textContent = data.error ? data.error.message : '失败'; return; }
     accountToken = data.token;
-    localStorage.setItem('mc_account_token', accountToken);
+    localStorage.setItem('zk_account_token', accountToken);
     showConsent();
   } catch { err.textContent = '网络错误,请重试'; }
 }
@@ -142,7 +142,7 @@ async function approve() {
     });
     const data = await res.json();
     if (res.status === 401) { // token expired: back to login
-      accountToken = ''; localStorage.removeItem('mc_account_token');
+      accountToken = ''; localStorage.removeItem('zk_account_token');
       init(); return;
     }
     if (!res.ok) { err.textContent = data.error ? data.error.message : '授权失败'; return; }

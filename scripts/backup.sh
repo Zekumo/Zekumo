@@ -7,11 +7,11 @@
 #   KEEP_DAYS=30 ./scripts/backup.sh
 #
 # 建议挂进 crontab(每天 3:17,避开整点):
-#   17 3 * * * cd /srv/minicloud && ./scripts/backup.sh >> /var/log/minicloud-backup.log 2>&1
+#   17 3 * * * cd /srv/zekumo && ./scripts/backup.sh >> /var/log/zekumo-backup.log 2>&1
 #
 # 恢复:
-#   gunzip -c backups/minicloud-20260726-031700.sql.gz | \
-#     docker compose -f docker-compose.prod.yml exec -T postgres psql -U minicloud -d minicloud
+#   gunzip -c backups/zekumo-20260726-031700.sql.gz | \
+#     docker compose -f docker-compose.prod.yml exec -T postgres psql -U zekumo -d zekumo
 
 set -eu
 
@@ -19,14 +19,14 @@ BACKUP_DIR="${BACKUP_DIR:-./backups}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-OUT="$BACKUP_DIR/minicloud-$STAMP.sql.gz"
+OUT="$BACKUP_DIR/zekumo-$STAMP.sql.gz"
 
 mkdir -p "$BACKUP_DIR"
 
 # 写临时文件再改名:中途失败不会留下一个看起来完整、实际截断的备份。
 TMP="$OUT.partial"
 docker compose -f "$COMPOSE_FILE" exec -T postgres \
-  pg_dump -U minicloud --clean --if-exists minicloud | gzip -9 > "$TMP"
+  pg_dump -U zekumo --clean --if-exists zekumo | gzip -9 > "$TMP"
 
 # pg_dump 通过管道时退出码会被 gzip 吞掉,所以显式验证产物可解压且非空。
 if ! gzip -t "$TMP" 2>/dev/null || [ ! -s "$TMP" ]; then
@@ -38,4 +38,4 @@ mv "$TMP" "$OUT"
 echo "backup ok: $OUT ($(du -h "$OUT" | cut -f1))"
 
 # 过期清理放在验证成功之后:备份失败的那天不应该顺手删掉旧的。
-find "$BACKUP_DIR" -name 'minicloud-*.sql.gz' -type f -mtime "+$KEEP_DAYS" -print -delete
+find "$BACKUP_DIR" -name 'zekumo-*.sql.gz' -type f -mtime "+$KEEP_DAYS" -print -delete

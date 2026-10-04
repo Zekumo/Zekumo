@@ -1,4 +1,4 @@
-module minicloud
+module zekumo
 
 go 1.26.4
 

@@ -1,4 +1,4 @@
-<title>MiniCloud 下阶段功能规划 PRD</title>
+<title>Zekumo 下阶段功能规划 PRD</title>
 <style>
 :root {
   --bg: #F3F5FB; --surface: #FFFFFF; --surface-2: #F8F9FD;
@@ -138,7 +138,7 @@ a:hover { text-decoration: underline; }
 <div class="layout">
 <aside class="sidebar">
   <div class="sidebar-brand">
-    <div class="brand-name">MiniCloud</div>
+    <div class="brand-name">Zekumo</div>
     <div class="brand-meta">下阶段功能规划 · 2026-08</div>
   </div>
   <nav class="nav-section">
@@ -160,7 +160,7 @@ a:hover { text-decoration: underline; }
 </aside>
 
 <main class="main">
-  <div class="doc-title">MiniCloud 下阶段功能规划</div>
+  <div class="doc-title">Zekumo 下阶段功能规划</div>
   <div class="doc-subtitle">面向小游戏 BaaS 平台的社交层、运营工具与平台扩展能力</div>
   <div class="meta-row">
     <span class="meta-chip">状态：草稿</span>
@@ -505,7 +505,7 @@ a:hover { text-decoration: underline; }
         <div>
           <div class="section-label">示例用法</div>
           <div class="table-wrap" style="padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text-sub)">
-            <span style="color:var(--accent)">const</span> mc = <span style="color:var(--accent)">new</span> MiniCloud({ appId: <span style="color:var(--p3)">"mc_xxx"</span>, baseUrl: <span style="color:var(--p3)">"https://api.example.com"</span> });<br>
+            <span style="color:var(--accent)">const</span> mc = <span style="color:var(--accent)">new</span> Zekumo({ appId: <span style="color:var(--p3)">"zk_xxx"</span>, baseUrl: <span style="color:var(--p3)">"https://api.example.com"</span> });<br>
             <span style="color:var(--accent)">await</span> mc.auth.loginAsGuest({ deviceId });<br>
             <span style="color:var(--accent)">await</span> mc.playerData.set(<span style="color:var(--p3)">"save1"</span>, { level: 3 });<br>
             mc.realtime.on(<span style="color:var(--p3)">"room.state"</span>, ({ playerId, state }) => updatePlayer(playerId, state));

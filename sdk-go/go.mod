@@ -1,4 +1,4 @@
-module github.com/minicloud/sdk-go
+module github.com/zekumo/sdk-go
 
 go 1.23
 

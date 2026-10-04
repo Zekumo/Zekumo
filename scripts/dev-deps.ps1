@@ -11,17 +11,17 @@ wsl -u root -d Ubuntu -- sh -c @'
 sysctl -w net.ipv4.ip_forward=1 >/dev/null
 service docker start >/dev/null 2>&1
 sleep 2
-if ! docker inspect minicloud-pg >/dev/null 2>&1; then
-  docker run -d --name minicloud-pg --restart unless-stopped --network host \
-    -e POSTGRES_USER=minicloud -e POSTGRES_PASSWORD=minicloud -e POSTGRES_DB=minicloud \
+if ! docker inspect zekumo-pg >/dev/null 2>&1; then
+  docker run -d --name zekumo-pg --restart unless-stopped --network host \
+    -e POSTGRES_USER=zekumo -e POSTGRES_PASSWORD=zekumo -e POSTGRES_DB=zekumo \
     postgres:16-alpine
 else
-  docker start minicloud-pg
+  docker start zekumo-pg
 fi
-if ! docker inspect minicloud-redis >/dev/null 2>&1; then
-  docker run -d --name minicloud-redis --restart unless-stopped --network host redis:7-alpine
+if ! docker inspect zekumo-redis >/dev/null 2>&1; then
+  docker run -d --name zekumo-redis --restart unless-stopped --network host redis:7-alpine
 else
-  docker start minicloud-redis
+  docker start zekumo-redis
 fi
 sleep 2
 docker ps --format '{{.Names}} {{.Status}}'

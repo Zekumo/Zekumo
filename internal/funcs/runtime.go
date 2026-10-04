@@ -13,9 +13,9 @@ import (
 
 	"github.com/dop251/goja"
 
-	"minicloud/internal/currency"
-	"minicloud/internal/leaderboard"
-	"minicloud/internal/repo"
+	"zekumo/internal/currency"
+	"zekumo/internal/leaderboard"
+	"zekumo/internal/repo"
 )
 
 const (

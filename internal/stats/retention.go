@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"minicloud/internal/httpx"
+	"zekumo/internal/httpx"
 )
 
 // Retention snapshots are cohort-based: cohort sizes are refreshed for the

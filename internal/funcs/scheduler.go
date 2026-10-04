@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"minicloud/internal/repo"
-	"minicloud/internal/safego"
+	"zekumo/internal/repo"
+	"zekumo/internal/safego"
 )
 
 const tickEvery = 10 * time.Second

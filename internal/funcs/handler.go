@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"regexp"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 var fnName = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)

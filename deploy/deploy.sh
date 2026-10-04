@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
-# MiniCloud 自动部署脚本(在服务器上执行)。
+# Zekumo 自动部署脚本(在服务器上执行)。
 #
 # 流程:备份 → 拉取最新源码 → 构建镜像 → 重启服务 → 健康检查 → 失败自动回滚。
 # 要求:服务器装有 docker compose v2 和 curl;脚本与 docker-compose.yml、.env 同目录。
 #
 # 用法:
-#   ./deploy.sh                       # 部署默认目录 /opt/minicloud
-#   ./deploy.sh /srv/minicloud        # 部署指定目录
+#   ./deploy.sh                       # 部署默认目录 /opt/zekumo
+#   ./deploy.sh /srv/zekumo        # 部署指定目录
 #   VERSION=1.1.0 ./deploy.sh         # 指定版本号(默认取时间戳,便于回滚区分)
 #   SKIP_BACKUP=1 ./deploy.sh         # 跳过部署前备份
 #
 # 源码更新方式:src/ 是 git 仓库则自动 git pull --ff-only;
-# 否则检测 /opt/minicloud/ 下是否有新上传的 minicloud-src-<版本>.tar.gz
+# 否则检测 /opt/zekumo/ 下是否有新上传的 zekumo-src-<版本>.tar.gz
 # (本机用 deploy/package.ps1 生成),有就自动解压进 src/ 再构建。
 #
-# 每次部署生成一个新镜像 tag(minicloud:<版本>),保留当前与上一个,
+# 每次部署生成一个新镜像 tag(zekumo:<版本>),保留当前与上一个,
 # 其余旧镜像自动清理。回滚是重新拉起上一个 tag,不碰数据卷。
 
 set -euo pipefail
 
-APP_DIR="${1:-/opt/minicloud}"
+APP_DIR="${1:-/opt/zekumo}"
 COMPOSE_FILE="$APP_DIR/docker-compose.yml"
-LOG_FILE="${DEPLOY_LOG:-/var/log/minicloud-deploy.log}"
+LOG_FILE="${DEPLOY_LOG:-/var/log/zekumo-deploy.log}"
 ENV_FILE="$APP_DIR/.env"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/readyz}"
 READY_TIMEOUT="${READY_TIMEOUT:-180}"   # 秒
@@ -34,11 +34,11 @@ cd "$APP_DIR"
 # ---- 前置检查 ------------------------------------------------------------
 [ -f "$COMPOSE_FILE" ] || fail "找不到 $COMPOSE_FILE,确认目录结构是否正确"
 [ -f "$ENV_FILE" ]    || fail "找不到 $ENV_FILE(生产配置),拒绝空配置部署"
-# 源码来源:src/ 目录存在,或上传了 minicloud-src-*.tar.gz(首次部署还没有 src/,
+# 源码来源:src/ 目录存在,或上传了 zekumo-src-*.tar.gz(首次部署还没有 src/,
 # 等第 2 步解压时创建)。两者都没有才拒绝。
 if [ ! -d "$APP_DIR/src" ]; then
-  ls -1 "$APP_DIR"/minicloud-src-*.tar.gz >/dev/null 2>&1 \
-    || fail "找不到 $APP_DIR/src 源码目录,也没有源码压缩包可解压:先上传 minicloud-src-<版本>.tar.gz"
+  ls -1 "$APP_DIR"/zekumo-src-*.tar.gz >/dev/null 2>&1 \
+    || fail "找不到 $APP_DIR/src 源码目录,也没有源码压缩包可解压:先上传 zekumo-src-<版本>.tar.gz"
 fi
 command -v docker >/dev/null 2>&1 || fail "服务器未安装 docker"
 docker compose version >/dev/null 2>&1 || fail "docker compose v2 不可用"
@@ -55,12 +55,12 @@ for k in JWT_SECRET POSTGRES_PASSWORD ADMIN_PASSWORD BASE_URL; do check_env "$k"
 # ---- 版本号 ---------------------------------------------------------------
 OLD_VERSION="$(grep -E '^VERSION=' "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2 || true)"
 OLD_VERSION="${OLD_VERSION:-1.0.0}"
-# 未显式指定版本时,若存在 minicloud-src-<版本>.tar.gz 则从包名取版本,否则取时间戳
+# 未显式指定版本时,若存在 zekumo-src-<版本>.tar.gz 则从包名取版本,否则取时间戳
 NEW_VERSION="${VERSION:-}"
 if [ -z "$NEW_VERSION" ]; then
-  LATEST_TAR="$(ls -1 "$APP_DIR"/minicloud-src-*.tar.gz 2>/dev/null | sort -V | tail -1 || true)"
+  LATEST_TAR="$(ls -1 "$APP_DIR"/zekumo-src-*.tar.gz 2>/dev/null | sort -V | tail -1 || true)"
   if [ -n "$LATEST_TAR" ]; then
-    NEW_VERSION="$(basename "$LATEST_TAR" | sed -E 's/^minicloud-src-(.+)\.tar\.gz$/\1/')"
+    NEW_VERSION="$(basename "$LATEST_TAR" | sed -E 's/^zekumo-src-(.+)\.tar\.gz$/\1/')"
   else
     NEW_VERSION="$(date +%Y%m%d%H%M%S)"
   fi
@@ -81,7 +81,7 @@ fi
 # 优先方式:git 仓库则 git pull;否则看有没有新上传的源码压缩包,
 # 有就解压进 src/(解压覆盖,不删除多余文件 —— 删除旧文件会造成构建缓存失效)。
 STAMP_FILE="$APP_DIR/src/.source-stamp"
-NEWEST_TAR="$(ls -1 "$APP_DIR"/minicloud-src-*.tar.gz 2>/dev/null | sort -V | tail -1 || true)"
+NEWEST_TAR="$(ls -1 "$APP_DIR"/zekumo-src-*.tar.gz 2>/dev/null | sort -V | tail -1 || true)"
 
 if [ -d "$APP_DIR/src/.git" ]; then
   log "git pull --ff-only 拉取最新源码…"
@@ -96,12 +96,12 @@ else
 fi
 
 # ---- 3. 构建新镜像 ----------------------------------------------------------
-log "构建镜像 minicloud:$NEW_VERSION(首次构建需要几分钟)…"
+log "构建镜像 zekumo:$NEW_VERSION(首次构建需要几分钟)…"
 VERSION="$NEW_VERSION" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build server \
   >> "$LOG_FILE" 2>&1 || fail "构建失败,服务保持原版本运行"
 
 # ---- 4. 重启服务 ------------------------------------------------------------
-log "拉起 minicloud:$NEW_VERSION…"
+log "拉起 zekumo:$NEW_VERSION…"
 VERSION="$NEW_VERSION" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d \
   >> "$LOG_FILE" 2>&1 || fail "启动失败,服务保持原版本运行"
 
@@ -134,8 +134,8 @@ fi
 
 # ---- 6. 清理旧镜像(保留当前与上一个) ---------------------------------------
 log "清理旧镜像…"
-docker images "minicloud:*" --format '{{.Repository}}:{{.Tag}}' \
-  | grep -vE "minicloud:(${NEW_VERSION}|${OLD_VERSION})" \
+docker images "zekumo:*" --format '{{.Repository}}:{{.Tag}}' \
+  | grep -vE "zekumo:(${NEW_VERSION}|${OLD_VERSION})" \
   | xargs -r docker rmi -f >> "$LOG_FILE" 2>&1 || log "警告: 旧镜像清理不完整"
 
 # ---- 7. 完成 ---------------------------------------------------------------

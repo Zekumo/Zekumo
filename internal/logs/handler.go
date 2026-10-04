@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
 )
 
 type Handler struct{ Svc *Service }

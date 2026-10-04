@@ -1,6 +1,6 @@
-# minicloud-sdk-go
+# zekumo-sdk-go
 
-Official Go SDK for [MiniCloud](../README.md), the mini-game BaaS platform.
+Official Go SDK for [Zekumo](../README.md), the mini-game BaaS platform.
 Covers every player API plus the realtime WebSocket gateway, and runs on
 **Windows, Linux and macOS** (amd64 and arm64) with one dependency,
 `gorilla/websocket`.
@@ -9,7 +9,7 @@ Built for desktop game clients, game servers, updaters and ops tooling — the
 places where the browser JS SDK does not fit.
 
 ```bash
-go get github.com/minicloud/sdk-go
+go get github.com/zekumo/sdk-go
 ```
 
 ## Quick start
@@ -21,13 +21,13 @@ import (
     "context"
     "log"
 
-    minicloud "github.com/minicloud/sdk-go"
+    zekumo "github.com/zekumo/sdk-go"
 )
 
 func main() {
     ctx := context.Background()
-    mc := minicloud.New(minicloud.Options{
-        AppID:   "mc_xxx",                     // safe to ship in a client
+    mc := zekumo.New(zekumo.Options{
+        AppID:   "zk_xxx",                     // safe to ship in a client
         BaseURL: "https://api.example.com",
     })
 
@@ -61,15 +61,15 @@ on quit instead of waiting out a timeout.
 
 ## Handling errors
 
-API errors arrive as `*minicloud.Error` carrying the server's stable `Code`.
+API errors arrive as `*zekumo.Error` carrying the server's stable `Code`.
 Branch on the code, never on the message:
 
 ```go
 _, err := mc.Currency.Spend(ctx, coinID, 50, txnID, "bought a hat")
 switch {
-case minicloud.IsCode(err, "insufficient_funds"): // HTTP 402
+case zekumo.IsCode(err, "insufficient_funds"): // HTTP 402
     showShop()
-case minicloud.IsCode(err, "player_banned"):        // HTTP 403
+case zekumo.IsCode(err, "player_banned"):        // HTTP 403
     showBanNotice()
 case err != nil:
     log.Print(err)
@@ -102,7 +102,7 @@ rt.On("room.state", func(data json.RawMessage) {
 })
 
 rt.On("chat.msg", func(data json.RawMessage) {
-    var m minicloud.ChatMessage
+    var m zekumo.ChatMessage
     json.Unmarshal(data, &m)
     appendToChat(m.SenderName, m.Content)
 })
@@ -123,7 +123,7 @@ long work to a channel your game loop drains.
 **One connection per player.** If the same player connects elsewhere, this
 connection is closed, `"replaced"` fires, and the client stops reconnecting
 (fighting for the slot would loop forever). `rt.Err()` then returns
-`minicloud.ErrReplaced`.
+`zekumo.ErrReplaced`.
 
 Events: `welcome`, `pong`, `reconnecting`, `replaced`, `room.created`,
 `room.joined`, `room.left`, `room.list`, `room.member_joined`,
@@ -135,8 +135,8 @@ Events: `welcome`, `pong`, `reconnecting`, `replaced`, `room.created`,
 These endpoints need no token, because an updater runs before login:
 
 ```go
-mc := minicloud.New(minicloud.Options{AppID: appID, BaseURL: baseURL})
-upd, err := mc.Updates.Check(ctx, minicloud.CheckOptions{
+mc := zekumo.New(zekumo.Options{AppID: appID, BaseURL: baseURL})
+upd, err := mc.Updates.Check(ctx, zekumo.CheckOptions{
     Version:  "1.0.0",
     Platform: "windows",  // windows | macos | linux | android | ios | web | any
     Arch:     "amd64",    // amd64 | arm64 | any
@@ -165,7 +165,7 @@ Writes are signed with `app_secret`, which **must never ship in a game
 client**. Use `Signer` from your own server or an ops tool:
 
 ```go
-sg := minicloud.NewSigner(baseURL, appID, os.Getenv("MC_APP_SECRET"))
+sg := zekumo.NewSigner(baseURL, appID, os.Getenv("ZEKUMO_APP_SECRET"))
 sg.Put(ctx, "public", "event", map[string]any{"double_drop": true}, 0)
 sg.Put(ctx, "public", "flash_sale", cfg, 2*time.Hour) // expires by itself
 sg.Delete(ctx, "public", "event")
@@ -206,7 +206,7 @@ skip a login on next launch:
 ```go
 saveToDisk(mc.Token())
 // next launch
-mc := minicloud.New(minicloud.Options{AppID: appID, BaseURL: url, Token: saved})
+mc := zekumo.New(zekumo.Options{AppID: appID, BaseURL: url, Token: saved})
 ```
 
 A token outlives the process but not forever; on `401` (`IsCode(err,

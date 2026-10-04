@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# MiniCloud 首次部署引导(在服务器上执行一次)。
+# Zekumo 首次部署引导(在服务器上执行一次)。
 #
-# 职责:生成 /opt/minicloud/.env,随机生成 JWT_SECRET / POSTGRES_PASSWORD /
+# 职责:生成 /opt/zekumo/.env,随机生成 JWT_SECRET / POSTGRES_PASSWORD /
 #       ADMIN_PASSWORD 等凭据,并收集对外域名 BASE_URL。
 #       密钥只在服务器上生成,不经过本机、不进任何压缩包。
 #
 # 幂等:已存在的 .env 只补缺失项,已填的值绝不覆盖。重复执行安全。
 #
 # 用法(上传 docker-compose.yml、lock-origin.sh、deploy.sh、本脚本之后):
-#   cd /opt/minicloud && chmod +x bootstrap.sh && ./bootstrap.sh
+#   cd /opt/zekumo && chmod +x bootstrap.sh && ./bootstrap.sh
 #
 # 非交互(自动化/CI):
 #   BASE_URL=https://panel.mn1.top ./bootstrap.sh
 #
 # 生成的密码会打印在结尾,复制到自己密码管理器里,之后随时可从 .env 查
-#   grep ADMIN_PASSWORD /opt/minicloud/.env
+#   grep ADMIN_PASSWORD /opt/zekumo/.env
 
 set -euo pipefail
 
@@ -52,7 +52,7 @@ req() { # key default(cur 为空时用)
 echo "部署目录: $APP_DIR"
 
 # ---- 基础项 ---------------------------------------------------------------
-req MINICLOUD_ENV "production"
+req ZEKUMO_ENV "production"
 req ADMIN_USERNAME "$ADMIN_USERNAME"
 
 # ---- 随机凭据(openssl 生成;同名环境变量传入则优先生效,不覆盖已有值) -------------
@@ -68,7 +68,7 @@ fi
 
 # ---- 依赖连接串 ------------------------------------------------------------
 pgp="$(current POSTGRES_PASSWORD)"
-req DATABASE_URL "postgres://minicloud:${pgp}@postgres:5432/minicloud"
+req DATABASE_URL "postgres://zekumo:${pgp}@postgres:5432/zekumo"
 req REDIS_ADDR "redis:6379"
 
 # ---- 对外域名(生产必填,填 localhost 客户端下载不到更新产物) -------------------
@@ -100,7 +100,7 @@ req LOG_HTTP_ALL "false"
 req TOKEN_TTL "168h"
 req VERSION "1.0.0"
 req FUNC_HTTP_ALLOW_PRIVATE "false"
-req MINICLOUD_ADDR ":8080"
+req ZEKUMO_ADDR ":8080"
 
 chmod 600 "$ENV_FILE"
 

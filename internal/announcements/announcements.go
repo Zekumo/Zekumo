@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 // Handler exposes the announcements API over HTTP.

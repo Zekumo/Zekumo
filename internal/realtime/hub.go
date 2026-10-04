@@ -14,10 +14,10 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/chat"
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/auth"
+	"zekumo/internal/chat"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 var upgrader = websocket.Upgrader{

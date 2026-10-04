@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"minicloud/internal/config"
-	"minicloud/internal/server"
-	"minicloud/internal/storage"
-	"minicloud/internal/store"
+	"zekumo/internal/config"
+	"zekumo/internal/server"
+	"zekumo/internal/storage"
+	"zekumo/internal/store"
 )
 
 func main() {
@@ -33,7 +33,7 @@ func main() {
 		}
 		if cfg.Production() {
 			log.Fatalf("refusing to start in production with %d unsafe setting(s); "+
-				"fix them or run without MINICLOUD_ENV=production", len(problems))
+				"fix them or run without ZEKUMO_ENV=production", len(problems))
 		}
 	}
 
@@ -68,7 +68,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("listen %s: %v", cfg.Addr, err)
 	}
-	log.Printf("minicloud %s listening on %s (env: %s, storage: %s, console at /admin/)",
+	log.Printf("zekumo %s listening on %s (env: %s, storage: %s, console at /admin/)",
 		server.Version, ln.Addr(), cfg.Env, cfg.StorageDriver)
 
 	serveErr := make(chan error, 1)

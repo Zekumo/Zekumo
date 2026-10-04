@@ -1,11 +1,11 @@
-// Command demo exercises the SDK against a running MiniCloud server: guest
+// Command demo exercises the SDK against a running Zekumo server: guest
 // login, a save round-trip, a leaderboard submit, the realtime gateway, and
 // an update check. It is the fastest way to confirm a deployment works from a
 // desktop client's point of view.
 //
 // Run it against a local server:
 //
-//	go run ./examples/demo -url http://localhost:8080 -app mc_xxx
+//	go run ./examples/demo -url http://localhost:8080 -app zk_xxx
 //
 // Every step prints what it did, so a failure says which call broke rather
 // than just exiting non-zero.
@@ -22,11 +22,11 @@ import (
 	"runtime"
 	"time"
 
-	minicloud "github.com/minicloud/sdk-go"
+	zekumo "github.com/zekumo/sdk-go"
 )
 
 func main() {
-	baseURL := flag.String("url", "http://localhost:8080", "MiniCloud base URL")
+	baseURL := flag.String("url", "http://localhost:8080", "Zekumo base URL")
 	appID := flag.String("app", "", "App ID from the console (required)")
 	device := flag.String("device", "demo-device-1", "device id for guest login")
 	flag.Parse()
@@ -40,7 +40,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	mc := minicloud.New(minicloud.Options{AppID: *appID, BaseURL: *baseURL})
+	mc := zekumo.New(zekumo.Options{AppID: *appID, BaseURL: *baseURL})
 
 	// --- login ---
 	login, err := mc.Auth.LoginAsGuest(ctx, *device, "")
@@ -68,7 +68,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("submit score: %v", err)
 	}
-	top, err := mc.Leaderboards.Top(ctx, "demo", minicloud.TopOptions{Limit: 3})
+	top, err := mc.Leaderboards.Top(ctx, "demo", zekumo.TopOptions{Limit: 3})
 	if err != nil {
 		log.Fatalf("read board: %v", err)
 	}
@@ -78,14 +78,14 @@ func main() {
 	}
 
 	// --- announcements (no token needed) ---
-	anns, err := mc.Announce.List(ctx, minicloud.AnnounceOptions{})
+	anns, err := mc.Announce.List(ctx, zekumo.AnnounceOptions{})
 	if err != nil {
 		log.Fatalf("announcements: %v", err)
 	}
 	fmt.Printf("%d active announcement(s)\n", len(anns))
 
 	// --- update check, as an updater would do it ---
-	upd, err := mc.Updates.Check(ctx, minicloud.CheckOptions{
+	upd, err := mc.Updates.Check(ctx, zekumo.CheckOptions{
 		Version:  "1.0.0",
 		Platform: platform(), // report the real OS so artifact matching works
 		Arch:     runtime.GOARCH,
@@ -108,13 +108,13 @@ func main() {
 // realtimeDemo connects, creates a room, syncs one state frame and reads the
 // echo back, then leaves. It waits on channels rather than sleeping, so it
 // finishes as soon as the server answers.
-func realtimeDemo(ctx context.Context, mc *minicloud.Client) {
+func realtimeDemo(ctx context.Context, mc *zekumo.Client) {
 	rt := mc.Realtime()
 
 	created := make(chan string, 1)
 	rt.On("room.created", func(data json.RawMessage) {
 		var ev struct {
-			Room minicloud.Room `json:"room"`
+			Room zekumo.Room `json:"room"`
 		}
 		json.Unmarshal(data, &ev)
 		select {

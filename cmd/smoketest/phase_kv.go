@@ -153,9 +153,9 @@ func signedRaw(s *state, method, target string, body []byte, ts, sig string) err
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("X-MC-App-Id", s.appID)
-	req.Header.Set("X-MC-Timestamp", ts)
-	req.Header.Set("X-MC-Signature", sig)
+	req.Header.Set("X-Zekumo-App-Id", s.appID)
+	req.Header.Set("X-Zekumo-Timestamp", ts)
+	req.Header.Set("X-Zekumo-Signature", sig)
 	return doKV(req)
 }
 

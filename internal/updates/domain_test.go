@@ -3,7 +3,7 @@ package updates
 import (
 	"testing"
 
-	"minicloud/internal/repo"
+	"zekumo/internal/repo"
 )
 
 func published(id int64, version string, rollout int) repo.Release {

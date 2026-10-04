@@ -26,7 +26,7 @@
 // player connects again. Reconnecting there would fight the new connection
 // for the slot forever, so that closes the client for good.
 
-package minicloud
+package zekumo
 
 import (
 	"context"
@@ -54,7 +54,7 @@ const (
 // ErrReplaced is returned by Err after the server closed this connection
 // because the same player connected from somewhere else. It is terminal: the
 // client does not reconnect.
-var ErrReplaced = errors.New("minicloud: connection replaced by a newer one for this player")
+var ErrReplaced = errors.New("zekumo: connection replaced by a newer one for this player")
 
 // Handler receives one event's payload. data is the raw "data" field, left
 // undecoded so a handler only pays to parse what it cares about.
@@ -112,7 +112,7 @@ func (r *Realtime) On(event string, h Handler) {
 func (r *Realtime) wsURL() (string, error) {
 	u, err := url.Parse(r.c.BaseURL())
 	if err != nil {
-		return "", fmt.Errorf("minicloud: bad base URL %q: %w", r.c.BaseURL(), err)
+		return "", fmt.Errorf("zekumo: bad base URL %q: %w", r.c.BaseURL(), err)
 	}
 	switch u.Scheme {
 	case "https":
@@ -120,7 +120,7 @@ func (r *Realtime) wsURL() (string, error) {
 	case "http":
 		u.Scheme = "ws"
 	default:
-		return "", fmt.Errorf("minicloud: base URL must be http or https, got %q", u.Scheme)
+		return "", fmt.Errorf("zekumo: base URL must be http or https, got %q", u.Scheme)
 	}
 	u.Path = strings.TrimSuffix(u.Path, "/") + "/v1/ws"
 	u.RawQuery = "token=" + url.QueryEscape(r.c.Token()) // the gateway takes the JWT as a query param
@@ -162,9 +162,9 @@ func (r *Realtime) dial(ctx context.Context) (*websocket.Conn, error) {
 		// A rejected handshake carries the reason as HTTP status; surfacing it
 		// distinguishes an expired token from an unreachable server.
 		if res != nil {
-			return nil, fmt.Errorf("minicloud: websocket handshake failed (HTTP %d): %w", res.StatusCode, err)
+			return nil, fmt.Errorf("zekumo: websocket handshake failed (HTTP %d): %w", res.StatusCode, err)
 		}
-		return nil, fmt.Errorf("minicloud: websocket dial: %w", err)
+		return nil, fmt.Errorf("zekumo: websocket dial: %w", err)
 	}
 	conn.SetReadLimit(64 << 10)
 	return conn, nil
@@ -302,19 +302,19 @@ func (r *Realtime) Send(event string, data any) error {
 	conn, closed := r.conn, r.closed
 	r.mu.Unlock()
 	if closed {
-		return errors.New("minicloud: realtime client is closed")
+		return errors.New("zekumo: realtime client is closed")
 	}
 	if conn == nil {
-		return errors.New("minicloud: realtime client is not connected yet")
+		return errors.New("zekumo: realtime client is not connected yet")
 	}
 
 	payload, err := json.Marshal(envelope{Type: event, Data: mustJSON(data)})
 	if err != nil {
-		return fmt.Errorf("minicloud: encode %s: %w", event, err)
+		return fmt.Errorf("zekumo: encode %s: %w", event, err)
 	}
 	_ = conn.SetWriteDeadline(time.Now().Add(rtWriteWait))
 	if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
-		return fmt.Errorf("minicloud: send %s: %w", event, err)
+		return fmt.Errorf("zekumo: send %s: %w", event, err)
 	}
 	return nil
 }

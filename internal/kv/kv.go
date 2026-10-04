@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 const (
@@ -72,16 +72,16 @@ func pathNames(w http.ResponseWriter, r *http.Request, needKey bool) (ns, key st
 	return ns, key, true
 }
 
-// verifySigned authenticates a server-side request: headers X-MC-App-Id,
-// X-MC-Timestamp (unix seconds, ±5 min) and X-MC-Signature =
+// verifySigned authenticates a server-side request: headers X-Zekumo-App-Id,
+// X-Zekumo-Timestamp (unix seconds, ±5 min) and X-Zekumo-Signature =
 // "sha256=" + hex(HMAC-SHA256(app_secret, timestamp + "." + method + "." + path + "." + body)).
 func (h *Handler) verifySigned(w http.ResponseWriter, r *http.Request, body []byte) *repo.Game {
-	appID := r.Header.Get("X-MC-App-Id")
-	tsRaw := r.Header.Get("X-MC-Timestamp")
-	sig := strings.TrimPrefix(r.Header.Get("X-MC-Signature"), "sha256=")
+	appID := r.Header.Get("X-Zekumo-App-Id")
+	tsRaw := r.Header.Get("X-Zekumo-Timestamp")
+	sig := strings.TrimPrefix(r.Header.Get("X-Zekumo-Signature"), "sha256=")
 	if appID == "" || tsRaw == "" || sig == "" {
 		httpx.Error(w, http.StatusUnauthorized, "missing_signature",
-			"X-MC-App-Id, X-MC-Timestamp and X-MC-Signature headers are required")
+			"X-Zekumo-App-Id, X-Zekumo-Timestamp and X-Zekumo-Signature headers are required")
 		return nil
 	}
 	ts, err := strconv.ParseInt(tsRaw, 10, 64)

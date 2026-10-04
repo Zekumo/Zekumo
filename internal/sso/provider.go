@@ -7,8 +7,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/repo"
+	"zekumo/internal/auth"
+	"zekumo/internal/repo"
 )
 
 // Provider implements auth.Provider for platform accounts. Two credential

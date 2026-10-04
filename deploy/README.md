@@ -1,4 +1,4 @@
-# 面板部署 · MiniCloud
+# 面板部署 · Zekumo
 
 目标链路:
 
@@ -14,10 +14,10 @@
 
 ## 一、上传
 
-在面板的文件管理里建 `/opt/minicloud`,传成这个结构:
+在面板的文件管理里建 `/opt/zekumo`,传成这个结构:
 
 ```
-/opt/minicloud/
+/opt/zekumo/
 ├── docker-compose.yml      ← 本目录的 docker-compose.panel.yml,改名
 ├── bootstrap.sh            ← 本目录的同名文件(首次部署生成 .env)
 ├── lock-origin.sh          ← 本目录的同名文件
@@ -34,13 +34,13 @@
 传完设权限(面板的终端里执行):
 
 ```bash
-cd /opt/minicloud && chmod +x bootstrap.sh lock-origin.sh deploy.sh
+cd /opt/zekumo && chmod +x bootstrap.sh lock-origin.sh deploy.sh
 ```
 
 ### 首次部署:生成配置(只做一次)
 
 ```bash
-cd /opt/minicloud && ./bootstrap.sh
+cd /opt/zekumo && ./bootstrap.sh
 ```
 
 它会现场随机生成 `JWT_SECRET`、`POSTGRES_PASSWORD`、`ADMIN_PASSWORD`,写入 `.env`(权限 600)。
@@ -54,10 +54,10 @@ cd /opt/minicloud && ./bootstrap.sh
 
 ```powershell
 # 本机(项目根目录):
-.\deploy\package.ps1            # 生成 deploy\dist\minicloud-src-<时间戳>.tar.gz
+.\deploy\package.ps1            # 生成 deploy\dist\zekumo-src-<时间戳>.tar.gz
 ```
 
-把 `minicloud-src-*.tar.gz` 上传到 `/opt/minicloud/`(和 deploy.sh 同目录),
+把 `zekumo-src-*.tar.gz` 上传到 `/opt/zekumo/`(和 deploy.sh 同目录),
 执行 `./deploy.sh` 时它会自动解压进 `src/` 再构建。
 以后每次改完代码,重新打包上传、再跑 deploy.sh 就是一次新部署。
 
@@ -67,7 +67,7 @@ cd /opt/minicloud && ./bootstrap.sh
 ## 二、锁定源站(**在开放域名之前做**)
 
 ```bash
-cd /opt/minicloud && ./lock-origin.sh
+cd /opt/zekumo && ./lock-origin.sh
 ```
 
 只放行 22 端口和 Cloudflare 官方 IP 段的 80/443,其余入站一律拒绝。
@@ -82,11 +82,11 @@ cd /opt/minicloud && ./lock-origin.sh
 
 ## 三、启动
 
-面板 →「容器」→「编排 / Compose」→ 新建,路径选 `/opt/minicloud`,
+面板 →「容器」→「编排 / Compose」→ 新建,路径选 `/opt/zekumo`,
 或者直接在终端里:
 
 ```bash
-cd /opt/minicloud && docker compose up -d --build
+cd /opt/zekumo && docker compose up -d --build
 ```
 
 首次构建要几分钟(拉 Go 镜像 + 编译)。看进度:
@@ -98,9 +98,9 @@ docker compose logs -f server
 ### 以后每次更新代码(自动部署)
 
 ```bash
-cd /opt/minicloud
+cd /opt/zekumo
 # 1. 本机打包:.\deploy\package.ps1
-# 2. 把新的 minicloud-src-<版本>.tar.gz 上传到 /opt/minicloud/
+# 2. 把新的 zekumo-src-<版本>.tar.gz 上传到 /opt/zekumo/
 ./deploy.sh
 ```
 
@@ -108,12 +108,12 @@ cd /opt/minicloud
 → 构建新版本镜像 → 平滑重启 → 健康检查(`/readyz` 确认 Postgres/Redis 都通)
 → 不健康自动回滚到上一个版本 → 清理旧镜像。
 版本号默认取源码包名里的版本,也可 `VERSION=1.1.0 ./deploy.sh` 手动指定。
-日志在 `/var/log/minicloud-deploy.log`。
+日志在 `/var/log/zekumo-deploy.log`。
 
 看到这一行就是起来了:
 
 ```
-minicloud 1.0.0 listening on [::]:8080 (env: production, storage: local, console at /admin/)
+zekumo 1.0.0 listening on [::]:8080 (env: production, storage: local, console at /admin/)
 ```
 
 **如果它没起来而是退出了**,大概率是配置校验拦下了 —— 日志会明确列出哪几项不合格,
@@ -160,8 +160,8 @@ curl -s localhost:8080/readyz
 
 ```bash
 openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-  -keyout /etc/ssl/private/minicloud.key \
-  -out /etc/ssl/certs/minicloud.crt \
+  -keyout /etc/ssl/private/zekumo.key \
+  -out /etc/ssl/certs/zekumo.crt \
   -subj "/CN=panel.mn1.top"
 ```
 
@@ -174,7 +174,7 @@ curl -s https://panel.mn1.top/readyz
 ```
 
 浏览器打开 `https://panel.mn1.top/admin/`,用户名 `admin`,
-密码在 `.env` 里(`grep ADMIN_PASSWORD /opt/minicloud/.env`)。
+密码在 `.env` 里(`grep ADMIN_PASSWORD /opt/zekumo/.env`)。
 
 登录后确认两件事:
 
@@ -184,8 +184,8 @@ curl -s https://panel.mn1.top/readyz
 完整功能验证(会创建并删除一个临时游戏):
 
 ```bash
-cd /opt/minicloud/src
-MINICLOUD_URL=https://panel.mn1.top MINICLOUD_WS=wss://panel.mn1.top go run ./cmd/smoketest
+cd /opt/zekumo/src
+ZEKUMO_URL=https://panel.mn1.top ZEKUMO_WS=wss://panel.mn1.top go run ./cmd/smoketest
 ```
 
 服务器上没装 Go 的话,在你本机跑同样的命令即可 —— 它是纯客户端。
@@ -195,28 +195,28 @@ MINICLOUD_URL=https://panel.mn1.top MINICLOUD_WS=wss://panel.mn1.top go run ./cm
 ## 七、备份
 
 ```bash
-cp /opt/minicloud/src/scripts/backup.sh /opt/minicloud/
-chmod +x /opt/minicloud/backup.sh
+cp /opt/zekumo/src/scripts/backup.sh /opt/zekumo/
+chmod +x /opt/zekumo/backup.sh
 crontab -e
 ```
 
 加一行(3:17 而不是整点,避开所有人都在跑备份的时刻):
 
 ```
-17 3 * * * cd /opt/minicloud && COMPOSE_FILE=docker-compose.yml ./backup.sh >> /var/log/mc-backup.log 2>&1
+17 3 * * * cd /opt/zekumo && COMPOSE_FILE=docker-compose.yml ./backup.sh >> /var/log/mc-backup.log 2>&1
 ```
 
 **装完当天就演练一次恢复。** 没验证过的备份等于没有备份:
 
 ```bash
-gunzip -c backups/minicloud-*.sql.gz | \
-  docker compose exec -T postgres psql -U minicloud -d minicloud
+gunzip -c backups/zekumo-*.sql.gz | \
+  docker compose exec -T postgres psql -U zekumo -d zekumo
 ```
 
 ## 八、日常操作
 
 ```bash
-cd /opt/minicloud
+cd /opt/zekumo
 
 docker compose logs -f server        # 看日志
 docker compose restart server        # 重启(优雅关闭,不丢缓冲的日志)

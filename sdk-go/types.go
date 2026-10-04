@@ -1,12 +1,12 @@
-// Package minicloud is the official Go SDK for MiniCloud, the mini-game BaaS
+// Package zekumo is the official Go SDK for Zekumo, the mini-game BaaS
 // platform. It covers every player-facing API plus the realtime WebSocket
 // gateway, and runs on Windows, Linux and macOS with one dependency
 // (gorilla/websocket).
 //
 // Typical use from a desktop game client:
 //
-//	mc := minicloud.New(minicloud.Options{
-//	    AppID:   "mc_xxx",
+//	mc := zekumo.New(zekumo.Options{
+//	    AppID:   "zk_xxx",
 //	    BaseURL: "https://api.example.com",
 //	})
 //	login, err := mc.Auth.LoginAsGuest(ctx, deviceID, "")
@@ -18,7 +18,7 @@
 // This file holds the wire types: one struct per JSON shape the server
 // returns. Field names and tags mirror the server's own structs, so adding a
 // field on the server only means adding it here.
-package minicloud
+package zekumo
 
 import (
 	"encoding/json"

@@ -11,7 +11,7 @@
 #   sh lock-origin.sh --dry-run  # 只打印将要执行的命令
 #
 # Cloudflare 的 IP 段会变(不常见),官方建议定期刷新。可以每月跑一次:
-#   0 4 1 * * /opt/minicloud/lock-origin.sh >> /var/log/mc-lock-origin.log 2>&1
+#   0 4 1 * * /opt/zekumo/lock-origin.sh >> /var/log/mc-lock-origin.log 2>&1
 
 set -eu
 

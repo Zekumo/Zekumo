@@ -10,9 +10,9 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 var boardName = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,64}$`)

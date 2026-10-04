@@ -4,9 +4,9 @@ import (
 	"errors"
 	"net/http"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 // Handler serves read-only story dialogue APIs to game clients.

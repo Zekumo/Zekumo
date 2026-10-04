@@ -2,7 +2,7 @@
 // press ripples and the light/dark toggle.
 
 // --- theme: follow the system until the user picks a side ---
-const THEME_KEY = 'mc_admin_theme';
+const THEME_KEY = 'zekumo_admin_theme';
 const applyTheme = mode => mode === 'system'
   ? document.documentElement.removeAttribute('data-theme')
   : document.documentElement.setAttribute('data-theme', mode);

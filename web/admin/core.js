@@ -1,7 +1,7 @@
 // Shared plumbing: API access, formatting, and the UI primitives (dialogs,
 // snackbar, secret fields, empty states) the pages build on.
 
-let token = localStorage.getItem('mc_admin_token') || '';
+let token = localStorage.getItem('zekumo_admin_token') || '';
 const state = { games: [], gameId: null, game: null, me: null };
 
 // ---------- API ----------
@@ -184,14 +184,14 @@ async function login() {
       password: document.getElementById('loginPass').value,
     });
     token = data.token;
-    localStorage.setItem('mc_admin_token', token);
+    localStorage.setItem('zekumo_admin_token', token);
     await enterApp();
   } catch (e) { toast('登录失败:' + e.message); }
 }
 
 function logout() {
   token = '';
-  localStorage.removeItem('mc_admin_token');
+  localStorage.removeItem('zekumo_admin_token');
   document.getElementById('appView').classList.add('hidden');
   document.getElementById('loginView').classList.remove('hidden');
 }

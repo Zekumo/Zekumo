@@ -8,7 +8,7 @@
 // signature test below recomputes the HMAC exactly as internal/kv does, so a
 // drift in either implementation shows up here.
 
-package minicloud
+package zekumo
 
 import (
 	"context"
@@ -51,7 +51,7 @@ func serve(t *testing.T, status int, reply string) (*Client, *capture) {
 		_, _ = io.WriteString(w, reply)
 	}))
 	t.Cleanup(srv.Close)
-	return New(Options{AppID: "mc_test", BaseURL: srv.URL}), got
+	return New(Options{AppID: "zk_test", BaseURL: srv.URL}), got
 }
 
 func TestLoginStoresTokenAndScopesToApp(t *testing.T) {
@@ -71,8 +71,8 @@ func TestLoginStoresTokenAndScopesToApp(t *testing.T) {
 	// A login that forgets app_id authenticates against no game at all.
 	var sent map[string]any
 	_ = json.Unmarshal([]byte(got.body), &sent)
-	if sent["app_id"] != "mc_test" {
-		t.Errorf("app_id = %v, want mc_test", sent["app_id"])
+	if sent["app_id"] != "zk_test" {
+		t.Errorf("app_id = %v, want zk_test", sent["app_id"])
 	}
 	if sent["provider"] != "guest" || sent["device_id"] != "device-1" {
 		t.Errorf("credentials not sent: %s", got.body)
@@ -103,7 +103,7 @@ func TestPublicCallOmitsBearer(t *testing.T) {
 	if got.auth != "" {
 		t.Errorf("Authorization = %q, want none on a public endpoint", got.auth)
 	}
-	if got.path != "/v1/apps/mc_test/updates/check" {
+	if got.path != "/v1/apps/zk_test/updates/check" {
 		t.Errorf("path = %q", got.path)
 	}
 	if !strings.Contains(got.query, "version=1.0.0") || !strings.Contains(got.query, "platform=windows") {
@@ -181,7 +181,7 @@ func TestErrorCarriesServerCode(t *testing.T) {
 	}
 	var apiErr *Error
 	if !errors.As(err, &apiErr) {
-		t.Fatalf("error is %T, want *minicloud.Error", err)
+		t.Fatalf("error is %T, want *zekumo.Error", err)
 	}
 	if apiErr.Code != "insufficient_funds" || apiErr.Status != 402 {
 		t.Errorf("got %+v, want code insufficient_funds status 402", apiErr)
@@ -200,7 +200,7 @@ func TestNonJSONErrorStillYieldsCode(t *testing.T) {
 	err := c.Logs.Report(context.Background(), Log{Message: "hi"})
 	var apiErr *Error
 	if !errors.As(err, &apiErr) {
-		t.Fatalf("error is %T, want *minicloud.Error", err)
+		t.Fatalf("error is %T, want *zekumo.Error", err)
 	}
 	if apiErr.Code != "http_502" {
 		t.Errorf("code = %q, want http_502", apiErr.Code)
@@ -233,7 +233,7 @@ func TestSignatureMatchesServerRecipe(t *testing.T) {
 	defer srv.Close()
 
 	const secret = "s3cr3t"
-	sg := NewSigner(srv.URL, "mc_test", secret)
+	sg := NewSigner(srv.URL, "zk_test", secret)
 	if err := sg.Put(context.Background(), "public", "event", map[string]bool{"on": true}, 2*time.Hour); err != nil {
 		t.Fatalf("put: %v", err)
 	}
@@ -242,17 +242,17 @@ func TestSignatureMatchesServerRecipe(t *testing.T) {
 		t.Errorf("query = %q, want ttl=7200", got.query)
 	}
 	// Recompute exactly as internal/kv/kv.go does.
-	ts := got.hdr.Get("X-MC-Timestamp")
+	ts := got.hdr.Get("X-Zekumo-Timestamp")
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(ts + "." + http.MethodPut + "." + got.path + "."))
 	mac.Write([]byte(got.body))
 	want := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
-	if sig := got.hdr.Get("X-MC-Signature"); sig != want {
+	if sig := got.hdr.Get("X-Zekumo-Signature"); sig != want {
 		t.Errorf("signature mismatch\n got %s\nwant %s", sig, want)
 	}
-	if got.hdr.Get("X-MC-App-Id") != "mc_test" {
-		t.Errorf("app id header = %q", got.hdr.Get("X-MC-App-Id"))
+	if got.hdr.Get("X-Zekumo-App-Id") != "zk_test" {
+		t.Errorf("app id header = %q", got.hdr.Get("X-Zekumo-App-Id"))
 	}
 }
 
@@ -267,16 +267,16 @@ func TestSignedDeleteHasEmptyBodyInSignature(t *testing.T) {
 	defer srv.Close()
 
 	const secret = "s3cr3t"
-	if err := NewSigner(srv.URL, "mc_test", secret).
+	if err := NewSigner(srv.URL, "zk_test", secret).
 		Delete(context.Background(), "public", "event"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
-	ts := got.hdr.Get("X-MC-Timestamp")
+	ts := got.hdr.Get("X-Zekumo-Timestamp")
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(ts + "." + http.MethodDelete + "." + got.path + "."))
 	want := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-	if sig := got.hdr.Get("X-MC-Signature"); sig != want {
+	if sig := got.hdr.Get("X-Zekumo-Signature"); sig != want {
 		t.Errorf("signature mismatch\n got %s\nwant %s", sig, want)
 	}
 }
@@ -291,7 +291,7 @@ func TestOversizedKVValueFailsBeforeSending(t *testing.T) {
 	defer srv.Close()
 
 	big := strings.Repeat("x", maxKVValue)
-	err := NewSigner(srv.URL, "mc_test", "s").Put(context.Background(), "public", "k", big, 0)
+	err := NewSigner(srv.URL, "zk_test", "s").Put(context.Background(), "public", "k", big, 0)
 	if err == nil {
 		t.Fatal("expected an error for an oversized value")
 	}
@@ -301,7 +301,7 @@ func TestOversizedKVValueFailsBeforeSending(t *testing.T) {
 }
 
 func TestTTLOutOfRangeIsRejected(t *testing.T) {
-	sg := NewSigner("http://example.invalid", "mc_test", "s")
+	sg := NewSigner("http://example.invalid", "zk_test", "s")
 	if err := sg.Put(context.Background(), "public", "k", 1, 400*24*time.Hour); err == nil {
 		t.Error("expected an error for a TTL over one year")
 	}
@@ -315,7 +315,7 @@ func TestContextCancellationAborts(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(Options{AppID: "mc_test", BaseURL: srv.URL})
+	c := New(Options{AppID: "zk_test", BaseURL: srv.URL})
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
@@ -332,7 +332,7 @@ func TestWebSocketURLDerivation(t *testing.T) {
 		{"http://localhost:8080", "ws://localhost:8080/v1/ws?token=t"},
 		{"https://example.com/prefix/", "wss://example.com/prefix/v1/ws?token=t"},
 	} {
-		c := New(Options{AppID: "mc_test", BaseURL: tc.base, Token: "t"})
+		c := New(Options{AppID: "zk_test", BaseURL: tc.base, Token: "t"})
 		got, err := c.Realtime().wsURL()
 		if err != nil {
 			t.Fatalf("%s: %v", tc.base, err)
@@ -345,7 +345,7 @@ func TestWebSocketURLDerivation(t *testing.T) {
 
 // A token with URL-special characters must survive the query encoding.
 func TestWebSocketURLEscapesToken(t *testing.T) {
-	c := New(Options{AppID: "mc_test", BaseURL: "https://x.test", Token: "a+b/c=="})
+	c := New(Options{AppID: "zk_test", BaseURL: "https://x.test", Token: "a+b/c=="})
 	got, err := c.Realtime().wsURL()
 	if err != nil {
 		t.Fatal(err)
@@ -358,7 +358,7 @@ func TestWebSocketURLEscapesToken(t *testing.T) {
 // Realtime must reject a base URL it cannot turn into a WebSocket URL rather
 // than dialling something surprising.
 func TestWebSocketURLRejectsNonHTTPScheme(t *testing.T) {
-	c := New(Options{AppID: "mc_test", BaseURL: "ftp://x.test"})
+	c := New(Options{AppID: "zk_test", BaseURL: "ftp://x.test"})
 	if _, err := c.Realtime().wsURL(); err == nil {
 		t.Error("expected an error for a non-HTTP base URL")
 	}
@@ -367,7 +367,7 @@ func TestWebSocketURLRejectsNonHTTPScheme(t *testing.T) {
 // The token is read and written from several goroutines in a real game; this
 // fails under -race if the mutex is ever dropped.
 func TestTokenIsRaceFree(t *testing.T) {
-	c := New(Options{AppID: "mc_test", BaseURL: "http://x.test"})
+	c := New(Options{AppID: "zk_test", BaseURL: "http://x.test"})
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < 1000; i++ {
@@ -385,7 +385,7 @@ func TestTokenIsRaceFree(t *testing.T) {
 // slice under the lock so a handler registering another handler cannot
 // deadlock or race.
 func TestRealtimeHandlersAreRaceFree(t *testing.T) {
-	rt := New(Options{AppID: "mc_test", BaseURL: "http://x.test"}).Realtime()
+	rt := New(Options{AppID: "zk_test", BaseURL: "http://x.test"}).Realtime()
 	fired := make(chan struct{}, 100)
 	rt.On("tick", func(json.RawMessage) { fired <- struct{}{} })
 
@@ -408,7 +408,7 @@ func TestRealtimeHandlersAreRaceFree(t *testing.T) {
 // Close must be safe to call twice: a game commonly closes on error and again
 // on quit.
 func TestRealtimeCloseIsIdempotent(t *testing.T) {
-	rt := New(Options{AppID: "mc_test", BaseURL: "http://x.test"}).Realtime()
+	rt := New(Options{AppID: "zk_test", BaseURL: "http://x.test"}).Realtime()
 	if err := rt.Close(); err != nil {
 		t.Fatalf("first close: %v", err)
 	}
@@ -423,7 +423,7 @@ func TestRealtimeCloseIsIdempotent(t *testing.T) {
 
 // Sending before Connect must say so instead of panicking.
 func TestRealtimeSendBeforeConnect(t *testing.T) {
-	rt := New(Options{AppID: "mc_test", BaseURL: "http://x.test"}).Realtime()
+	rt := New(Options{AppID: "zk_test", BaseURL: "http://x.test"}).Realtime()
 	if err := rt.SyncState(map[string]int{"x": 1}); err == nil {
 		t.Error("expected an error when sending before Connect")
 	}

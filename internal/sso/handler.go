@@ -7,9 +7,9 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 // Handler serves the platform-account (通行证) API: register/login, ticket

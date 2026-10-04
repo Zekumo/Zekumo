@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 // KnownEvents is documentation for the console; hooks may subscribe to any
@@ -132,7 +132,7 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		"event":     "webhook.test",
 		"game_id":   hook.GameID,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
-		"data":      map[string]string{"hello": "minicloud"},
+		"data":      map[string]string{"hello": "zekumo"},
 	})
 	status := h.Bus.post(*hook, job{gameID: hook.GameID, event: "webhook.test", payload: payload})
 	httpx.JSON(w, http.StatusOK, map[string]any{"status": status, "ok": status >= 200 && status < 300})

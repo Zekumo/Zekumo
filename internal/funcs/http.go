@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"minicloud/internal/netsafe"
+	"zekumo/internal/netsafe"
 )
 
 const (
@@ -99,7 +99,7 @@ func (rt *Runtime) doFetch(allowlist, rawURL string, opts fetchOptions, budget t
 	for k, v := range opts.Headers {
 		req.Header.Set(k, v)
 	}
-	req.Header.Set("User-Agent", "MiniCloud-Function/1.0")
+	req.Header.Set("User-Agent", "Zekumo-Function/1.0")
 
 	client := netsafe.Client(min(fetchTimeout, budget), rt.AllowPrivateHTTP,
 		func(next *http.Request, via []*http.Request) error {

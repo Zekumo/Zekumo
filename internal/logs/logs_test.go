@@ -18,7 +18,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		url = "postgres://minicloud:minicloud@localhost:5432/minicloud"
+		url = "postgres://zekumo:zekumo@localhost:5432/zekumo"
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

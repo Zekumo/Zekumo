@@ -1,4 +1,4 @@
-export interface MiniCloudOptions {
+export interface ZekumoOptions {
   appId: string;
   baseUrl: string;
   token?: string;
@@ -203,13 +203,13 @@ export interface Room {
   members: Array<{ player_id: string; nickname: string; state?: Json }>;
 }
 
-export class MiniCloudError extends Error {
+export class ZekumoError extends Error {
   readonly status: number;
   readonly code: string;
 
   constructor(status: number, code: string, message: string) {
     super(message);
-    this.name = "MiniCloudError";
+    this.name = "ZekumoError";
     this.status = status;
     this.code = code;
   }
@@ -218,7 +218,7 @@ export class MiniCloudError extends Error {
 type Query = Record<string, string | number | boolean | undefined>;
 
 class Http {
-  constructor(private readonly sdk: MiniCloud) {}
+  constructor(private readonly sdk: Zekumo) {}
 
   async request<T>(
     method: string,
@@ -232,7 +232,7 @@ class Http {
     const headers: Record<string, string> = {};
     if (opts.body !== undefined) headers["Content-Type"] = "application/json";
     if (opts.auth !== false) {
-      if (!this.sdk.token) throw new MiniCloudError(0, "no_token", "call auth.loginAsGuest/login first");
+      if (!this.sdk.token) throw new ZekumoError(0, "no_token", "call auth.loginAsGuest/login first");
       headers["Authorization"] = `Bearer ${this.sdk.token}`;
     }
     const doFetch = this.sdk.fetchImpl;
@@ -252,14 +252,14 @@ class Http {
     }
     if (!res.ok) {
       const err = (parsed as { error?: { code?: string; message?: string } } | undefined)?.error;
-      throw new MiniCloudError(res.status, err?.code ?? "http_error", err?.message ?? `HTTP ${res.status}`);
+      throw new ZekumoError(res.status, err?.code ?? "http_error", err?.message ?? `HTTP ${res.status}`);
     }
     return parsed as T;
   }
 }
 
 class AuthAPI {
-  constructor(private readonly sdk: MiniCloud, private readonly http: Http) {}
+  constructor(private readonly sdk: Zekumo, private readonly http: Http) {}
 
   private async login(body: Record<string, unknown>): Promise<LoginResult> {
     const res = await this.http.request<LoginResult>("POST", "/v1/auth/login", {
@@ -310,7 +310,7 @@ class PlayerAPI {
 
   bind(opts: { ticket?: string; username?: string; password?: string }): Promise<{ bound: boolean; account_id: string }> {
     if (!opts.ticket && !(opts.username && opts.password)) {
-      return Promise.reject(new MiniCloudError(0, "bad_options", "ticket or username/password is required"));
+      return Promise.reject(new ZekumoError(0, "bad_options", "ticket or username/password is required"));
     }
     return this.http.request("POST", "/v1/player/bind", { body: opts });
   }
@@ -455,7 +455,7 @@ class MailboxAPI {
 }
 
 class AnnouncementsAPI {
-  constructor(private readonly sdk: MiniCloud, private readonly http: Http) {}
+  constructor(private readonly sdk: Zekumo, private readonly http: Http) {}
 
   async list(opts: { afterId?: string; platform?: string; channel?: string } = {}): Promise<Announcement[]> {
     const res = await this.http.request<{ announcements: Announcement[] }>(
@@ -468,7 +468,7 @@ class AnnouncementsAPI {
 }
 
 class FunctionsAPI {
-  constructor(private readonly sdk: MiniCloud, private readonly http: Http) {}
+  constructor(private readonly sdk: Zekumo, private readonly http: Http) {}
 
   /** Call a cloud function as the logged-in player. */
   call(name: string, body?: Json): Promise<FunctionResult> {
@@ -486,7 +486,7 @@ class FunctionsAPI {
 }
 
 class UpdatesAPI {
-  constructor(private readonly sdk: MiniCloud, private readonly http: Http) {}
+  constructor(private readonly sdk: Zekumo, private readonly http: Http) {}
 
   check(opts: {
     version: string;
@@ -641,7 +641,7 @@ export class RealtimeClient {
   private everConnected = false;
   private connecting?: Promise<void>;
 
-  constructor(private readonly sdk: MiniCloud) {}
+  constructor(private readonly sdk: Zekumo) {}
 
   get connected(): boolean {
     return this.ws?.readyState === OPEN;
@@ -650,7 +650,7 @@ export class RealtimeClient {
   connect(): Promise<void> {
     if (this.connected) return Promise.resolve();
     if (this.connecting) return this.connecting;
-    if (!this.sdk.token) return Promise.reject(new MiniCloudError(0, "no_token", "log in before connecting"));
+    if (!this.sdk.token) return Promise.reject(new ZekumoError(0, "no_token", "log in before connecting"));
     this.manuallyClosed = false;
     const pending = this.open();
     const wrapped = pending.finally(() => {
@@ -669,7 +669,7 @@ export class RealtimeClient {
     const WS = this.sdk.webSocketImpl;
     if (!WS) {
       return Promise.reject(
-        new MiniCloudError(0, "no_websocket", "no WebSocket available; pass one via options.webSocket"),
+        new ZekumoError(0, "no_websocket", "no WebSocket available; pass one via options.webSocket"),
       );
     }
     return new Promise((resolve, reject) => {
@@ -712,7 +712,7 @@ export class RealtimeClient {
         if (!this.manuallyClosed) this.scheduleReconnect();
         if (!settled) {
           settled = true;
-          reject(new MiniCloudError(0, "ws_closed", e.reason || "connection closed"));
+          reject(new ZekumoError(0, "ws_closed", e.reason || "connection closed"));
         }
       });
       ws.addEventListener("error", () => {
@@ -776,7 +776,7 @@ export class RealtimeClient {
 
   send(type: string, data?: unknown): void {
     if (!this.connected || !this.ws) {
-      throw new MiniCloudError(0, "not_connected", "realtime connection is not open");
+      throw new ZekumoError(0, "not_connected", "realtime connection is not open");
     }
     this.ws.send(JSON.stringify({ type, data }));
   }
@@ -795,11 +795,11 @@ export class RealtimeClient {
       };
       const onError = (err: { code?: string; message?: string }) => {
         cleanup();
-        reject(new MiniCloudError(0, err.code ?? "ws_error", err.message ?? "realtime error"));
+        reject(new ZekumoError(0, err.code ?? "ws_error", err.message ?? "realtime error"));
       };
       const timer = setTimeout(() => {
         cleanup();
-        reject(new MiniCloudError(0, "timeout", `no ${replyType} reply within 10s`));
+        reject(new ZekumoError(0, "timeout", `no ${replyType} reply within 10s`));
       }, REQUEST_TIMEOUT_MS);
       this.on(replyType, onReply as (d: unknown) => void);
       this.on("error", onError);
@@ -857,7 +857,7 @@ export class RealtimeClient {
 // Entry point
 // ---------------------------------------------------------------------------
 
-export class MiniCloud {
+export class Zekumo {
   readonly appId: string;
   readonly baseUrl: string;
   token?: string;
@@ -882,14 +882,14 @@ export class MiniCloud {
   readonly logs: LogsAPI;
   readonly realtime: RealtimeClient;
 
-  constructor(options: MiniCloudOptions) {
-    if (!options.appId) throw new MiniCloudError(0, "bad_options", "appId is required");
-    if (!options.baseUrl) throw new MiniCloudError(0, "bad_options", "baseUrl is required");
+  constructor(options: ZekumoOptions) {
+    if (!options.appId) throw new ZekumoError(0, "bad_options", "appId is required");
+    if (!options.baseUrl) throw new ZekumoError(0, "bad_options", "baseUrl is required");
     this.appId = options.appId;
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.token = options.token;
     const rawFetch = options.fetch ?? globalThis.fetch;
-    if (!rawFetch) throw new MiniCloudError(0, "no_fetch", "no fetch available; pass one via options.fetch");
+    if (!rawFetch) throw new ZekumoError(0, "no_fetch", "no fetch available; pass one via options.fetch");
     this.fetchImpl = rawFetch.bind(globalThis);
     this.webSocketImpl =
       options.webSocket ?? (globalThis as { WebSocket?: WebSocketConstructor }).WebSocket;
@@ -914,4 +914,4 @@ export class MiniCloud {
   }
 }
 
-export default MiniCloud;
+export default Zekumo;

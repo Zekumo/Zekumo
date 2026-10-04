@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"minicloud/internal/auth"
-	"minicloud/internal/httpx"
-	"minicloud/internal/ratelimit"
-	"minicloud/internal/storage"
-	"minicloud/web"
+	"zekumo/internal/auth"
+	"zekumo/internal/httpx"
+	"zekumo/internal/ratelimit"
+	"zekumo/internal/storage"
+	"zekumo/web"
 )
 
 // Per-IP limits are coarse flood control only, deliberately generous: carrier

@@ -7,7 +7,7 @@ import (
 	"hash/fnv"
 
 	"github.com/Masterminds/semver/v3"
-	"minicloud/internal/repo"
+	"zekumo/internal/repo"
 )
 
 var ValidPlatforms = map[string]bool{

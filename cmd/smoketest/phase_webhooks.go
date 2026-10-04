@@ -27,8 +27,8 @@ func phaseWebhooks(s *state) {
 		mac.Write(body)
 		want := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 		recvCh <- received{
-			event: r.Header.Get("X-MiniCloud-Event"),
-			valid: r.Header.Get("X-MiniCloud-Signature") == want,
+			event: r.Header.Get("X-Zekumo-Event"),
+			valid: r.Header.Get("X-Zekumo-Signature") == want,
 		}
 		w.WriteHeader(200)
 	}))

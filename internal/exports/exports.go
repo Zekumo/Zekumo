@@ -17,10 +17,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
-	"minicloud/internal/safego"
-	"minicloud/internal/storage"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
+	"zekumo/internal/safego"
+	"zekumo/internal/storage"
 )
 
 const jobTimeout = 10 * time.Minute
@@ -339,7 +339,7 @@ func (h *Handler) filename(job *repo.ExportJob) string {
 	if job.Format == "csv" {
 		ext = "zip"
 	}
-	return fmt.Sprintf("minicloud-export-%s.%s", job.ID[:8], ext)
+	return fmt.Sprintf("zekumo-export-%s.%s", job.ID[:8], ext)
 }
 
 func (h *Handler) withURL(ctx context.Context, job *repo.ExportJob) map[string]any {

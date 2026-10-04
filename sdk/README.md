@@ -1,17 +1,17 @@
-# minicloud-sdk
+# zekumo-sdk
 
-Official JavaScript / TypeScript SDK for MiniCloud. Zero dependencies, ESM + CJS, works in browsers and Node.js 18+ (Node < 22 needs a WebSocket implementation passed in for realtime).
+Official JavaScript / TypeScript SDK for Zekumo. Zero dependencies, ESM + CJS, works in browsers and Node.js 18+ (Node < 22 needs a WebSocket implementation passed in for realtime).
 
 ```bash
-npm install minicloud-sdk
+npm install zekumo-sdk
 ```
 
 ## Quick start
 
 ```ts
-import MiniCloud from "minicloud-sdk";
+import Zekumo from "zekumo-sdk";
 
-const mc = new MiniCloud({ appId: "mc_xxx", baseUrl: "https://api.example.com" });
+const mc = new Zekumo({ appId: "zk_xxx", baseUrl: "https://api.example.com" });
 
 await mc.auth.loginAsGuest({ deviceId: "device-123" });
 
@@ -49,14 +49,14 @@ Node < 22:
 
 ```ts
 import WebSocket from "ws";
-const mc = new MiniCloud({ appId, baseUrl, webSocket: WebSocket as never });
+const mc = new Zekumo({ appId, baseUrl, webSocket: WebSocket as never });
 ```
 
 ## Covered APIs
 
 `auth` (guest / password / SSO ticket) · `player` profile/bind · `playerData` saves · `leaderboards` (global/friends scope) · `achievements` · `friends` · `currency` · `mailbox` · `announcements` · `functions` (cloud functions) · `updates` check/history · `logs` · `dialogues` · `chat` history · `kv` (public namespaces) · `realtime` (rooms + chat over WebSocket).
 
-Errors are thrown as `MiniCloudError { status, code, message }`.
+Errors are thrown as `ZekumoError { status, code, message }`.
 
 ## Build
 

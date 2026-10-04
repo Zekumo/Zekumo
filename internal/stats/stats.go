@@ -16,8 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"minicloud/internal/httpx"
-	"minicloud/internal/repo"
+	"zekumo/internal/httpx"
+	"zekumo/internal/repo"
 )
 
 const counterTTL = 72 * time.Hour

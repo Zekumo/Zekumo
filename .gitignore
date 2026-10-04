@@ -1,5 +1,5 @@
 *.exe
-/minicloud
+/zekumo
 /server
 .env
 *.log

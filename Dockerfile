@@ -10,15 +10,15 @@ COPY . .
 #   docker build --build-arg VERSION=$(git describe --tags --always) .
 ARG VERSION=dev
 RUN CGO_ENABLED=0 go build \
-      -ldflags="-s -w -X minicloud/internal/server.Version=${VERSION}" \
-      -o /minicloud ./cmd/server
+      -ldflags="-s -w -X zekumo/internal/server.Version=${VERSION}" \
+      -o /zekumo ./cmd/server
 
 FROM alpine:3.20
 # wget is only here for the healthcheck below; ca-certificates is needed for
 # outbound HTTPS (S3 storage, webhook delivery, cloud-function fetches).
 RUN apk add --no-cache ca-certificates wget && adduser -D -u 10001 app
 USER app
-COPY --from=build /minicloud /usr/local/bin/minicloud
+COPY --from=build /zekumo /usr/local/bin/zekumo
 EXPOSE 8080
 
 # Readiness, not liveness: the container is only "healthy" once it can reach
@@ -26,4 +26,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8080/readyz >/dev/null || exit 1
 
-ENTRYPOINT ["minicloud"]
+ENTRYPOINT ["zekumo"]
