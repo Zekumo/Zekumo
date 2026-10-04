@@ -178,12 +178,16 @@ jobs:
           for i in {1..60}; do curl -fsS http://127.0.0.1:18081/readyz && break; sleep 1; done
           curl -fsS http://127.0.0.1:18081/readyz
           kill -TERM "$pid"
-          wait "$pid"
-          test "$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM schema_migrations')" = 21
-          test "$(psql "$DATABASE_URL" -Atc "SELECT recipient_count FROM mail_messages WHERE id='00000000-0000-0000-0000-000000000031'")" = 1
-          test "$(psql "$DATABASE_URL" -Atc "SELECT balance FROM currency_balances WHERE player_id='00000000-0000-0000-0000-000000000011'")" = 42
-          test "$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM friendships')" = 1
-          test "$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM retention_daily WHERE d1 IS NULL AND d7 IS NULL AND d30 IS NULL')" = 1
+          wait "$pid" || true
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$ BEGIN
+            IF (SELECT count(*) FROM schema_migrations) <> 21 THEN RAISE EXCEPTION 'migration count'; END IF;
+            IF (SELECT recipient_count FROM mail_messages WHERE id='00000000-0000-0000-0000-000000000031') <> 1 THEN RAISE EXCEPTION 'mail backfill'; END IF;
+            IF (SELECT balance FROM currency_balances WHERE player_id='00000000-0000-0000-0000-000000000011') <> 42 THEN RAISE EXCEPTION 'balance preservation'; END IF;
+            IF (SELECT count(*) FROM friendships) <> 1 THEN RAISE EXCEPTION 'friendship preservation'; END IF;
+            IF (SELECT count(*) FROM retention_daily WHERE d1 IS NULL AND d7 IS NULL AND d30 IS NULL) <> 1 THEN RAISE EXCEPTION 'retention invalidation'; END IF;
+          END $$;
+          SQL
           MINICLOUD_ADDR=127.0.0.1:18081 BASE_URL=http://127.0.0.1:18081 \
             LOCAL_DATA_DIR=/tmp/minicloud-upgrade-storage \
             /tmp/minicloud-server >/tmp/upgrade-2.log 2>&1 &
@@ -191,9 +195,9 @@ jobs:
           for i in {1..60}; do curl -fsS http://127.0.0.1:18081/readyz && break; sleep 1; done
           curl -fsS http://127.0.0.1:18081/readyz
           kill -TERM "$pid"
-          wait "$pid"
+          wait "$pid" || true
           test "$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM schema_migrations')" = 21
-          test "$(grep -c 'applied migration 0020\|applied migration 0021' /tmp/upgrade-2.log)" = 0
+          ! grep -q 'applied migration 0020\|applied migration 0021' /tmp/upgrade-2.log
       - name: Print logs on failure
         if: failure()
         run: cat /tmp/upgrade-1.log /tmp/upgrade-2.log || true
