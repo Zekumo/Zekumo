@@ -6,6 +6,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
+
+	"github.com/google/uuid"
 
 	"minicloud/internal/auth"
 	"minicloud/internal/httpx"
@@ -34,6 +37,15 @@ type Handler struct {
 
 const maxFriends = 200
 
+func validID(w http.ResponseWriter, value, field string) bool {
+	parsed, err := uuid.Parse(value)
+	if err != nil || parsed.String() != strings.ToLower(value) {
+		httpx.Error(w, http.StatusBadRequest, "bad_id", field+" must be a UUID")
+		return false
+	}
+	return true
+}
+
 func (s *Service) friendLimit(ctx context.Context, gameID string) (int, error) {
 	if s.Games.DB == nil {
 		return maxFriends, nil
@@ -60,6 +72,9 @@ func (h *Handler) SendRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.TargetPlayerID == "" {
 		httpx.Error(w, http.StatusBadRequest, "missing_field", "target_player_id is required")
+		return
+	}
+	if !validID(w, req.TargetPlayerID, "target_player_id") {
 		return
 	}
 	if req.TargetPlayerID == claims.Subject {
@@ -118,13 +133,15 @@ func (h *Handler) SendRequest(w http.ResponseWriter, r *http.Request) {
 
 	fr, err := h.Svc.Requests.Create(r.Context(), claims.GameID, claims.Subject, req.TargetPlayerID)
 	if err != nil {
+		if errors.Is(err, repo.ErrFriendBlocked) {
+			httpx.Error(w, http.StatusForbidden, "blocked", "cannot send friend request")
+			return
+		}
 		if repo.IsUniqueViolation(err) {
 			httpx.Error(w, http.StatusConflict, "request_exists", "a pending request already exists")
 			return
 		}
-		// ErrNotFound here means no row was returned (e.g. declined row was
-		// re-inserted by another caller simultaneously) — treat as conflict.
-		if errors.Is(err, repo.ErrNotFound) {
+		if errors.Is(err, repo.ErrFriendRequestConflict) {
 			httpx.Error(w, http.StatusConflict, "request_exists", "a pending request already exists")
 			return
 		}
@@ -144,6 +161,9 @@ func (h *Handler) Accept(w http.ResponseWriter, r *http.Request) {
 	if httpx.Decode(w, r, &req) != nil {
 		return
 	}
+	if !validID(w, req.RequestID, "request_id") {
+		return
+	}
 
 	fr, err := h.Svc.Requests.ByID(r.Context(), req.RequestID)
 	if err != nil {
@@ -159,27 +179,20 @@ func (h *Handler) Accept(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusForbidden, "forbidden", "only the recipient can accept this request")
 		return
 	}
-	count, err := h.Svc.Friendships.Count(r.Context(), claims.GameID, claims.Subject)
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
-		return
-	}
 	limit, err := h.Svc.friendLimit(r.Context(), claims.GameID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	if count >= limit {
-		httpx.Error(w, http.StatusConflict, "friend_limit", "friend limit reached")
-		return
-	}
-
-	if err := h.Svc.Requests.Accept(r.Context(), fr.ID); err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
-		return
-	}
-	// Create the symmetric friendship row.
-	if err := h.Svc.Friendships.Add(r.Context(), claims.GameID, fr.FromID, fr.ToID); err != nil {
+	if err := h.Svc.Requests.AcceptAndFriend(r.Context(), fr.ID, claims.GameID, claims.Subject, limit); err != nil {
+		if errors.Is(err, repo.ErrFriendLimit) {
+			httpx.Error(w, http.StatusConflict, "friend_limit", "friend limit reached")
+			return
+		}
+		if errors.Is(err, repo.ErrNotFound) {
+			httpx.Error(w, http.StatusConflict, "request_not_pending", "friend request is no longer pending")
+			return
+		}
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
@@ -194,6 +207,9 @@ func (h *Handler) Decline(w http.ResponseWriter, r *http.Request) {
 		RequestID string `json:"request_id"`
 	}
 	if httpx.Decode(w, r, &req) != nil {
+		return
+	}
+	if !validID(w, req.RequestID, "request_id") {
 		return
 	}
 	if err := h.Svc.Requests.DeclineInGame(r.Context(), req.RequestID, claims.GameID, claims.Subject); err != nil {
@@ -246,11 +262,10 @@ func (h *Handler) ListRequests(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Remove(w http.ResponseWriter, r *http.Request) {
 	claims := auth.ClaimsFrom(r.Context())
 	targetID := r.PathValue("player_id")
-	if err := h.Svc.Friendships.Remove(r.Context(), claims.GameID, claims.Subject, targetID); err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+	if !validID(w, targetID, "player_id") {
 		return
 	}
-	if err := h.Svc.Requests.DeleteBetween(r.Context(), claims.GameID, claims.Subject, targetID); err != nil {
+	if err := h.Svc.Friendships.RemoveAndCleanup(r.Context(), claims.GameID, claims.Subject, targetID); err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
@@ -272,6 +287,9 @@ func (h *Handler) Block(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "bad_request", "invalid target_player_id")
 		return
 	}
+	if !validID(w, req.TargetPlayerID, "target_player_id") {
+		return
+	}
 	target, err := h.Svc.Players.ByID(r.Context(), req.TargetPlayerID)
 	if err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
@@ -285,16 +303,8 @@ func (h *Handler) Block(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusNotFound, "player_not_found", "target player not found")
 		return
 	}
-	// Blocking ends any friendship and clears outstanding request history.
-	if err := h.Svc.Friendships.Remove(r.Context(), claims.GameID, claims.Subject, req.TargetPlayerID); err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
-		return
-	}
-	if err := h.Svc.Requests.DeleteBetween(r.Context(), claims.GameID, claims.Subject, req.TargetPlayerID); err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
-		return
-	}
-	if err := h.Svc.Blocks.Block(r.Context(), claims.GameID, claims.Subject, req.TargetPlayerID); err != nil {
+	// Blocking, relationship removal, and request cleanup are one transaction.
+	if err := h.Svc.Blocks.BlockAndCleanup(r.Context(), claims.GameID, claims.Subject, req.TargetPlayerID); err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}

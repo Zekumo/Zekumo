@@ -38,9 +38,13 @@ func (s *S3) PresignUpload(ctx context.Context, key string) (string, error) {
 }
 
 func (s *S3) PresignDownload(ctx context.Context, key, filename string) (string, error) {
+	return s.PresignDownloadTTL(ctx, key, filename, PresignTTL)
+}
+
+func (s *S3) PresignDownloadTTL(ctx context.Context, key, filename string, ttl time.Duration) (string, error) {
 	params := url.Values{}
 	params.Set("response-content-disposition", `attachment; filename="`+filename+`"`)
-	u, err := s.client.PresignedGetObject(ctx, s.bucket, key, PresignTTL, params)
+	u, err := s.client.PresignedGetObject(ctx, s.bucket, key, boundedPresignTTL(ttl), params)
 	if err != nil {
 		return "", err
 	}

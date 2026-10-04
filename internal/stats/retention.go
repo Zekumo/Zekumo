@@ -11,16 +11,26 @@ import (
 )
 
 // Retention snapshots are cohort-based: cohort sizes are refreshed for the
-// last 33 days, and each dN column is filled once, when the cohort is old
-// enough for the answer to be final. A dN value counts players of that cohort
-// whose last_login_at moved past their registration day — "came back at least
-// once within N days", measured at the N-day horizon.
+// last 33 days, and each dN column is filled once, after the corresponding
+// local calendar day is complete. A dN value counts players who logged in on
+// exactly day N after registration.
 type RetentionRow struct {
 	Date   string `json:"date"`
 	Cohort int    `json:"cohort"`
 	D1     *int   `json:"d1"`
 	D7     *int   `json:"d7"`
 	D30    *int   `json:"d30"`
+}
+
+type retentionSpec struct {
+	horizon int
+	minAge  int
+}
+
+var retentionSpecs = map[string]retentionSpec{
+	"d1":  {horizon: 1, minAge: 2},
+	"d7":  {horizon: 7, minAge: 8},
+	"d30": {horizon: 30, minAge: 31},
 }
 
 func (s *Service) ComputeRetention(ctx context.Context) {
@@ -36,16 +46,30 @@ func (s *Service) ComputeRetention(ctx context.Context) {
 		log.Printf("stats: retention cohort upsert failed: %v", err)
 		return
 	}
-	for col, minAge := range map[string]int{"d1": 2, "d7": 8, "d30": 31} {
+	for col, spec := range retentionSpecs {
 		_, err := s.DB.Exec(ctx,
 			`UPDATE retention_daily rd SET `+col+` = (
 			   SELECT count(*) FROM players p
 			   WHERE p.game_id = rd.game_id
 			     AND (p.created_at AT TIME ZONE $1)::date = rd.date
-			     AND (p.last_login_at AT TIME ZONE $1)::date > rd.date
+			     AND EXISTS (
+			       SELECT 1 FROM player_login_daily ld
+			       WHERE ld.player_id = p.id AND ld.game_id = p.game_id
+			         AND ld.login_date = rd.date + $2::int
+			     )
 			 )
-			 WHERE rd.`+col+` IS NULL AND rd.date <= ((now() AT TIME ZONE $1)::date - $2::int)`,
-			tz, minAge)
+			 WHERE rd.`+col+` IS NULL
+			   AND rd.date <= ((now() AT TIME ZONE $1)::date - $3::int)
+			   AND EXISTS (
+			     SELECT 1 FROM players cohort_player
+			     JOIN player_login_daily cohort_login
+			       ON cohort_login.player_id = cohort_player.id
+			      AND cohort_login.game_id = cohort_player.game_id
+			     WHERE cohort_player.game_id = rd.game_id
+			       AND (cohort_player.created_at AT TIME ZONE $1)::date = rd.date
+			       AND cohort_login.login_date = rd.date
+			   )`,
+			tz, spec.horizon, spec.minAge)
 		if err != nil {
 			log.Printf("stats: retention %s fill failed: %v", col, err)
 		}
@@ -97,16 +121,31 @@ type FunnelStep struct {
 	Count int    `json:"count"`
 }
 
-// Funnel aggregates cohorts old enough to have a final 7-day answer.
+// Funnel aggregates cohorts whose seven-day return window is complete.
 // Registration and first login coincide on this platform (a player row is
 // created by the first successful login), so the second step equals the first.
 func (s *Service) Funnel(ctx context.Context, gameID string, days int) ([]FunnelStep, error) {
 	var registered, returned7 int
 	err := s.DB.QueryRow(ctx,
-		`SELECT COALESCE(sum(cohort), 0), COALESCE(sum(d7), 0)
-		 FROM retention_daily
-		 WHERE game_id = $1 AND d7 IS NOT NULL
-		   AND date >= ((now() AT TIME ZONE $2)::date - ($3::int - 1))`,
+		`WITH cohorts AS (
+		   SELECT p.id, (p.created_at AT TIME ZONE $2)::date AS registered_on
+		   FROM players p
+		   WHERE p.game_id = $1
+		     AND (p.created_at AT TIME ZONE $2)::date >= ((now() AT TIME ZONE $2)::date - ($3::int - 1))
+		     AND (p.created_at AT TIME ZONE $2)::date <= ((now() AT TIME ZONE $2)::date - 8)
+		     AND EXISTS (
+		       SELECT 1 FROM player_login_daily registered
+		       WHERE registered.game_id = p.game_id AND registered.player_id = p.id
+		         AND registered.login_date = (p.created_at AT TIME ZONE $2)::date
+		     )
+		 )
+		 SELECT count(*), count(*) FILTER (WHERE EXISTS (
+		   SELECT 1 FROM player_login_daily ld
+		   WHERE ld.game_id = $1 AND ld.player_id = cohorts.id
+		     AND ld.login_date > cohorts.registered_on
+		     AND ld.login_date <= cohorts.registered_on + 7
+		 ))
+		 FROM cohorts`,
 		gameID, s.Loc.String(), days).Scan(&registered, &returned7)
 	if err != nil {
 		return nil, err

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"minicloud/internal/auth"
 	"minicloud/internal/httpx"
@@ -14,10 +16,13 @@ import (
 )
 
 const (
-	MaxPerGame = 8
-	maxKeyLen  = 128
-	maxNameLen = 32
+	MaxPerGame        = 8
+	maxKeyLen         = 128
+	maxNameLen        = 32
+	maxDisplayNameLen = 100
 )
+
+var ErrInvalidTransaction = errors.New("invalid currency transaction")
 
 type Service struct {
 	Currencies repo.Currencies
@@ -28,6 +33,12 @@ type Service struct {
 // GrantByName credits a player, resolving the currency by its short name.
 // Used by the cloud-function runtime.
 func (s *Service) GrantByName(ctx context.Context, gameID, name, playerID string, amount int64, idemKey, note string) (int64, bool, error) {
+	name = strings.TrimSpace(name)
+	playerID = strings.TrimSpace(playerID)
+	idemKey = strings.TrimSpace(idemKey)
+	if name == "" || playerID == "" || amount <= 0 || idemKey == "" || len(idemKey) > maxKeyLen {
+		return 0, false, ErrInvalidTransaction
+	}
 	cur, err := s.Currencies.ByName(ctx, gameID, name)
 	if err != nil {
 		return 0, false, err
@@ -72,6 +83,7 @@ func (h *Handler) decodeTx(w http.ResponseWriter, r *http.Request) *txRequest {
 		httpx.Error(w, http.StatusBadRequest, "bad_amount", "amount must be positive")
 		return nil
 	}
+	req.IdempotencyKey = strings.TrimSpace(req.IdempotencyKey)
 	if req.IdempotencyKey == "" || len(req.IdempotencyKey) > maxKeyLen {
 		httpx.Error(w, http.StatusBadRequest, "bad_idempotency_key", "idempotency_key is required (max 128 chars)")
 		return nil
@@ -123,6 +135,9 @@ func (h *Handler) writeLedger(w http.ResponseWriter, r *http.Request, currencyID
 		limit = 50
 	}
 	offset, _ := strconv.Atoi(q.Get("offset"))
+	if offset < 0 {
+		offset = 0
+	}
 	entries, err := h.Svc.Wallets.Ledger(r.Context(), currencyID, playerID, limit, offset)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
@@ -189,24 +204,25 @@ func (h *Handler) AdminCreate(w http.ResponseWriter, r *http.Request) {
 	if httpx.Decode(w, r, &body) != nil {
 		return
 	}
-	if body.Name == "" || len(body.Name) > maxNameLen {
+	body.Name = strings.TrimSpace(body.Name)
+	body.DisplayName = strings.TrimSpace(body.DisplayName)
+	if body.Name == "" || utf8.RuneCountInString(body.Name) > maxNameLen {
 		httpx.Error(w, http.StatusBadRequest, "bad_name", "name is required (max 32 chars)")
 		return
 	}
 	if body.DisplayName == "" {
 		body.DisplayName = body.Name
 	}
-	n, err := h.Svc.Currencies.CountByGame(r.Context(), gameID)
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+	if utf8.RuneCountInString(body.DisplayName) > maxDisplayNameLen {
+		httpx.Error(w, http.StatusBadRequest, "bad_display_name", "display_name must be at most 100 chars")
 		return
 	}
-	if n >= MaxPerGame {
-		httpx.Error(w, http.StatusUnprocessableEntity, "limit_reached", "a game can define at most 8 currencies")
-		return
-	}
-	cur, err := h.Svc.Currencies.Create(r.Context(), gameID, body)
+	cur, err := h.Svc.Currencies.CreateLimited(r.Context(), gameID, body, MaxPerGame)
 	if err != nil {
+		if errors.Is(err, repo.ErrCurrencyLimit) {
+			httpx.Error(w, http.StatusUnprocessableEntity, "limit_reached", "a game can define at most 8 currencies")
+			return
+		}
 		if repo.IsUniqueViolation(err) {
 			httpx.Error(w, http.StatusConflict, "name_exists", "a currency with this name already exists")
 			return
@@ -221,6 +237,11 @@ func (h *Handler) AdminCreate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 	var body repo.Currency
 	if httpx.Decode(w, r, &body) != nil {
+		return
+	}
+	body.DisplayName = strings.TrimSpace(body.DisplayName)
+	if body.DisplayName == "" || utf8.RuneCountInString(body.DisplayName) > maxDisplayNameLen {
+		httpx.Error(w, http.StatusBadRequest, "bad_display_name", "display_name is required (max 100 chars)")
 		return
 	}
 	cur, err := h.Svc.Currencies.Update(r.Context(), r.PathValue("cid"), body)
@@ -238,6 +259,10 @@ func (h *Handler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 // AdminDelete handles DELETE /admin/api/currencies/{cid}
 func (h *Handler) AdminDelete(w http.ResponseWriter, r *http.Request) {
 	if err := h.Svc.Currencies.Delete(r.Context(), r.PathValue("cid")); err != nil {
+		if errors.Is(err, repo.ErrCurrencyInUse) {
+			httpx.Error(w, http.StatusConflict, "currency_in_use", "currency has balances, ledger entries or pending mail rewards")
+			return
+		}
 		if errors.Is(err, repo.ErrNotFound) {
 			httpx.Error(w, http.StatusNotFound, "not_found", "currency not found")
 			return

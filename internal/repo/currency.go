@@ -11,6 +11,8 @@ import (
 var (
 	ErrInsufficientFunds = errors.New("insufficient funds")
 	ErrIdemConflict      = errors.New("idempotency key reused with different parameters")
+	ErrCurrencyLimit     = errors.New("currency limit reached")
+	ErrCurrencyInUse     = errors.New("currency has balances, ledger entries or pending rewards")
 )
 
 type Currencies struct{ DB *pgxpool.Pool }
@@ -33,6 +35,38 @@ func (r Currencies) Create(ctx context.Context, gameID string, c Currency) (*Cur
 		gameID, c.Name, c.DisplayName, c.IconURL))
 }
 
+// CreateLimited serializes definition creation per game and enforces the
+// configured maximum inside the same transaction. A handler-side count alone
+// would allow concurrent requests to exceed the limit.
+func (r Currencies) CreateLimited(ctx context.Context, gameID string, c Currency, max int) (*Currency, error) {
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, gameID); err != nil {
+		return nil, err
+	}
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM currencies WHERE game_id=$1`, gameID).Scan(&count); err != nil {
+		return nil, err
+	}
+	if count >= max {
+		return nil, ErrCurrencyLimit
+	}
+	cur, err := scanCurrency(tx.QueryRow(ctx,
+		`INSERT INTO currencies (game_id, name, display_name, icon_url)
+		 VALUES ($1,$2,$3,$4) RETURNING `+currencyCols,
+		gameID, c.Name, c.DisplayName, c.IconURL))
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return cur, nil
+}
+
 func (r Currencies) Update(ctx context.Context, id string, c Currency) (*Currency, error) {
 	return scanCurrency(r.DB.QueryRow(ctx,
 		`UPDATE currencies SET display_name=$2, icon_url=$3 WHERE id=$1 RETURNING `+currencyCols,
@@ -40,14 +74,43 @@ func (r Currencies) Update(ctx context.Context, id string, c Currency) (*Currenc
 }
 
 func (r Currencies) Delete(ctx context.Context, id string) error {
-	tag, err := r.DB.Exec(ctx, `DELETE FROM currencies WHERE id=$1`, id)
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	var gameID string
+	if err := tx.QueryRow(ctx, `SELECT game_id FROM currencies WHERE id=$1`, id).Scan(&gameID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, gameID); err != nil {
+		return err
+	}
+	var inUse bool
+	err = tx.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM currency_balances WHERE currency_id=$1::uuid)
+		     OR EXISTS (SELECT 1 FROM currency_ledger WHERE currency_id=$1::uuid)
+		     OR EXISTS (
+		       SELECT 1 FROM mail_messages m, jsonb_array_elements(m.rewards) reward
+		       WHERE reward->>'currency_id'=$1 AND m.expires_at > now()
+		     )`, id).Scan(&inUse)
+	if err != nil {
+		return err
+	}
+	if inUse {
+		return ErrCurrencyInUse
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM currencies WHERE id=$1`, id)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (r Currencies) ByID(ctx context.Context, id string) (*Currency, error) {
@@ -104,10 +167,10 @@ func (r Wallets) ApplyTx(ctx context.Context, tx pgx.Tx, currencyID, playerID st
 		}
 	} else {
 		err := tx.QueryRow(ctx,
-			`UPDATE currency_balances SET balance = balance + $3, updated_at = now()
-			 WHERE currency_id=$1 AND player_id=$2 AND balance >= -$3
+			`UPDATE currency_balances SET balance = balance + $3::bigint, updated_at = now()
+			 WHERE currency_id=$1 AND player_id=$2 AND balance >= $4::bigint
 			 RETURNING balance`,
-			currencyID, playerID, amount).Scan(&balance)
+			currencyID, playerID, amount, -amount).Scan(&balance)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, ErrInsufficientFunds
 		}
@@ -142,7 +205,7 @@ func (r Wallets) Apply(ctx context.Context, currencyID, playerID string, amount 
 	if lookupErr != nil {
 		return 0, false, lookupErr
 	}
-	if prev.Amount != amount {
+	if prev.Amount != amount || prev.Kind != kind || prev.Note != note {
 		return 0, false, ErrIdemConflict
 	}
 	return prev.BalanceAfter, true, nil

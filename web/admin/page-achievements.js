@@ -100,7 +100,10 @@ function unlockAchievement(id, name) {
       if (!playerId) throw new Error('请输入玩家 ID');
       const raw = dlgVal('unlockProgress');
       const body = { player_id: playerId };
-      if (raw) body.progress = Number(raw);
+      if (raw) {
+        body.progress = Number(raw);
+        if (!Number.isInteger(body.progress) || body.progress < 0) throw new Error('进度必须是非负整数');
+      }
       await api('POST', `/admin/api/achievements/${id}/unlock`, body);
       toast('已触发解锁');
     },

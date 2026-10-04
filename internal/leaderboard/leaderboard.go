@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 
 	"github.com/redis/go-redis/v9"
@@ -36,26 +37,34 @@ func (s *Service) TopFriends(ctx context.Context, gameID, board, playerID string
 	if err != nil {
 		return nil, err
 	}
-	allowed := make(map[string]struct{}, len(ids)+1)
-	allowed[playerID] = struct{}{}
-	for _, id := range ids {
-		allowed[id] = struct{}{}
+	ids = append(ids, playerID)
+	pipe := s.RDB.Pipeline()
+	scores := make([]*redis.FloatCmd, len(ids))
+	for i, id := range ids {
+		scores[i] = pipe.ZScore(ctx, key(gameID, board), id)
 	}
-	zs, err := s.RDB.ZRevRangeWithScores(ctx, key(gameID, board), 0, -1).Result()
-	if err != nil {
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
 		return nil, err
 	}
-	all := make([]Entry, 0, len(allowed))
-	for _, z := range zs {
-		id, ok := z.Member.(string)
-		if !ok {
+	all := make([]Entry, 0, len(ids))
+	for i, cmd := range scores {
+		score, err := cmd.Result()
+		if errors.Is(err, redis.Nil) {
 			continue
 		}
-		if _, ok := allowed[id]; !ok {
-			continue
+		if err != nil {
+			return nil, err
 		}
-		all = append(all, Entry{PlayerID: id, Score: int64(z.Score)})
+		all = append(all, Entry{PlayerID: ids[i], Score: int64(score)})
 	}
+	// Match Redis ZREVRANGE ordering: descending score, then descending member
+	// for ties. Rank is relative to the friend-scoped result.
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].Score == all[j].Score {
+			return all[i].PlayerID > all[j].PlayerID
+		}
+		return all[i].Score > all[j].Score
+	})
 	if offset < 0 {
 		offset = 0
 	}

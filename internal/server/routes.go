@@ -100,7 +100,7 @@ func registerPlayer(rt router) {
 	d := rt.d
 	rt.HandleFunc("GET /v1/apps/{app_id}/updates/check", d.updatesH.CheckUpdate)
 	rt.HandleFunc("GET /v1/apps/{app_id}/releases", d.updatesH.PublicReleases)
-	rt.HandleFunc("GET /v1/apps/{app_id}/announcements", d.announcementsH.PublicList)
+	rt.anon("GET /v1/apps/{app_id}/announcements", anonRule, d.announcementsH.PublicList)
 	rt.anon("GET /v1/apps/{app_id}/functions/{name}", fnAnonRule, d.fnH.PublicCall)
 	rt.anon("POST /v1/apps/{app_id}/functions/{name}", fnAnonRule, d.fnH.PublicCall)
 

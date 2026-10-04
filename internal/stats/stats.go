@@ -33,6 +33,14 @@ func (s *Service) dayKey(t time.Time) string {
 	return t.In(s.Loc).Format("2006-01-02")
 }
 
+// dayKeyOffset moves in calendar days rather than 24-hour chunks. This keeps
+// reporting windows correct across daylight-saving transitions.
+func (s *Service) dayKeyOffset(t time.Time, days int) string {
+	local := t.In(s.Loc)
+	day := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, s.Loc)
+	return day.AddDate(0, 0, days).Format("2006-01-02")
+}
+
 func (s *Service) key(gameID, day, kind string) string {
 	return "st:" + gameID + ":" + day + ":" + kind
 }
@@ -73,7 +81,26 @@ func (s *Service) recordCounter(gameID, kind string) {
 	}()
 }
 
-func (s *Service) RecordLogin(gameID string)     { s.recordCounter(gameID, "login") }
+// RecordLogin increments the aggregate counter and persists the player's
+// local login day. The daily identity table is what makes exact D1/D7/D30
+// cohorts possible; players.last_login_at only retains the most recent login.
+func (s *Service) RecordLogin(gameID, playerID string) {
+	s.recordCounter(gameID, "login")
+	go func() {
+		ctx, cancel := bg()
+		defer cancel()
+		_, err := s.DB.Exec(ctx,
+			`INSERT INTO player_login_daily (game_id, player_id, login_date)
+			 SELECT p.game_id, p.id, $3::date FROM players p
+			 WHERE p.game_id=$1 AND p.id=$2
+			 ON CONFLICT DO NOTHING`,
+			gameID, playerID, s.dayKey(time.Now()))
+		if err != nil {
+			log.Printf("stats: record player login day failed: %v", err)
+		}
+	}()
+}
+
 func (s *Service) RecordNewPlayer(gameID string) { s.recordCounter(gameID, "new") }
 
 type DayRow struct {
@@ -110,7 +137,7 @@ func (s *Service) Flush(ctx context.Context) {
 		return
 	}
 	now := time.Now()
-	for _, day := range []string{s.dayKey(now.Add(-24 * time.Hour)), s.dayKey(now)} {
+	for _, day := range []string{s.dayKeyOffset(now, -1), s.dayKey(now)} {
 		for _, g := range games {
 			row, err := s.live(ctx, g.ID, day)
 			if err != nil {
@@ -140,6 +167,7 @@ func (s *Service) StartAggregator(ctx context.Context) {
 	ticker := time.NewTicker(10 * time.Minute)
 	go func() {
 		defer ticker.Stop()
+		s.Flush(ctx)
 		for {
 			select {
 			case <-ctx.Done():
@@ -156,7 +184,7 @@ func (s *Service) StartAggregator(ctx context.Context) {
 func (s *Service) Query(ctx context.Context, gameID string, days int) ([]DayRow, error) {
 	now := time.Now()
 	today := s.dayKey(now)
-	since := s.dayKey(now.Add(-time.Duration(days-1) * 24 * time.Hour))
+	since := s.dayKeyOffset(now, -(days - 1))
 
 	rows, err := s.DB.Query(ctx,
 		`SELECT to_char(date, 'YYYY-MM-DD'), active, logins, new_players
@@ -187,7 +215,7 @@ func (s *Service) Query(ctx context.Context, gameID string, days int) ([]DayRow,
 
 	out := make([]DayRow, 0, days)
 	for i := days - 1; i >= 0; i-- {
-		day := s.dayKey(now.Add(-time.Duration(i) * 24 * time.Hour))
+		day := s.dayKeyOffset(now, -i)
 		row, ok := byDay[day]
 		if !ok {
 			row = DayRow{Date: day}
@@ -298,7 +326,7 @@ func (s *Service) Platform(ctx context.Context, days int, online func(string) in
 
 	now := time.Now()
 	today := s.dayKey(now)
-	since := s.dayKey(now.Add(-time.Duration(days-1) * 24 * time.Hour))
+	since := s.dayKeyOffset(now, -(days - 1))
 
 	// Stored history, summed across games.
 	rows, err := s.DB.Query(ctx,
@@ -325,7 +353,7 @@ func (s *Service) Platform(ctx context.Context, days int, online func(string) in
 		return nil, err
 	}
 	// A week of per-game history powers the sparkline in the games table.
-	trendFrom := s.dayKey(now.Add(-6 * 24 * time.Hour))
+	trendFrom := s.dayKeyOffset(now, -6)
 	trends, err := s.gameTrends(ctx, trendFrom)
 	if err != nil {
 		return nil, err
@@ -353,7 +381,7 @@ func (s *Service) Platform(ctx context.Context, days int, online func(string) in
 		}
 		gs.Trend = make([]int, 0, 7)
 		for i := 6; i >= 0; i-- {
-			day := s.dayKey(now.Add(-time.Duration(i) * 24 * time.Hour))
+			day := s.dayKeyOffset(now, -i)
 			v := trends[g.ID][day]
 			if day == today {
 				v = max(v, gs.Active) // today is still only in Redis
@@ -372,7 +400,7 @@ func (s *Service) Platform(ctx context.Context, days int, online func(string) in
 
 	out.Days = make([]DayRow, 0, days)
 	for i := days - 1; i >= 0; i-- {
-		day := s.dayKey(now.Add(-time.Duration(i) * 24 * time.Hour))
+		day := s.dayKeyOffset(now, -i)
 		row, ok := byDay[day]
 		if !ok {
 			row = DayRow{Date: day}

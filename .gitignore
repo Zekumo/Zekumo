@@ -9,3 +9,5 @@ deploy/.env
 sdk/node_modules/
 sdk/dist/
 sdk/package-lock.json
+__pycache__/
+*.pyc

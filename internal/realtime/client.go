@@ -20,12 +20,13 @@ type Client struct {
 	conn *websocket.Conn
 	send chan []byte
 
+	connID   string
 	playerID string
 	gameID   string
 	nickname string
 
-	room *Room
-	subs map[string]struct{}
+	roomID string
+	subs   map[string]struct{}
 
 	sendMu sync.Mutex
 	closed bool
@@ -108,6 +109,7 @@ func (c *Client) writePump() {
 				return
 			}
 		case <-ticker.C:
+			c.hub.touchPresence(c)
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				c.close(websocket.CloseAbnormalClosure, "ping failed")

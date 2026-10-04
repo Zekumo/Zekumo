@@ -23,13 +23,32 @@ import (
 	"minicloud/internal/storage"
 )
 
-const jobTimeout = 10 * time.Minute
+const (
+	jobTimeout        = 10 * time.Minute
+	jobStatusTimeout  = 5 * time.Second
+	exportDownloadTTL = 24 * time.Hour
+)
 
 type Service struct {
 	DB      *pgxpool.Pool
-	Jobs    repo.ExportJobs
+	Jobs    jobStore
 	Players repo.Players
 	Blob    storage.Storage
+
+	// Test seams for deterministic deadline coverage. Production leaves both
+	// zero-valued and uses jobTimeout plus the real exporter.
+	workTimeout time.Duration
+	buildExport func(context.Context, *repo.ExportJob) ([]byte, string, error)
+}
+
+type jobStore interface {
+	Create(context.Context, string, string, *string, string) (*repo.ExportJob, error)
+	ByID(context.Context, string) (*repo.ExportJob, error)
+	ByGame(context.Context, string, int, int) ([]repo.ExportJob, error)
+	SetRunning(context.Context, string) error
+	SetDone(context.Context, string, string, int64) error
+	SetFailed(context.Context, string, string) error
+	FailStale(context.Context) error
 }
 
 type playerExport struct {
@@ -73,26 +92,49 @@ type achRow struct {
 }
 
 func (s *Service) run(jobID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), jobTimeout)
+	timeout := s.workTimeout
+	if timeout <= 0 {
+		timeout = jobTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	fail := func(message string) {
+		// The work context is commonly canceled precisely when this path runs.
+		// Use a fresh bounded context so a timeout cannot strand a job in
+		// "running" forever.
+		statusCtx, statusCancel := context.WithTimeout(context.Background(), jobStatusTimeout)
+		defer statusCancel()
+		_ = s.Jobs.SetFailed(statusCtx, jobID, message)
+	}
 
 	job, err := s.Jobs.ByID(ctx, jobID)
 	if err != nil {
 		return
 	}
-	_ = s.Jobs.SetRunning(ctx, jobID)
+	if err := s.Jobs.SetRunning(ctx, jobID); err != nil {
+		fail("could not start export: " + err.Error())
+		return
+	}
 
-	body, ext, err := s.build(ctx, job)
+	build := s.buildExport
+	if build == nil {
+		build = s.build
+	}
+	body, ext, err := build(ctx, job)
 	if err != nil {
-		_ = s.Jobs.SetFailed(ctx, jobID, err.Error())
+		fail(err.Error())
 		return
 	}
 	key := fmt.Sprintf("exports/%s/%s.%s", job.GameID, job.ID, ext)
 	if err := s.Blob.Put(ctx, key, bytes.NewReader(body), int64(len(body))); err != nil {
-		_ = s.Jobs.SetFailed(ctx, jobID, "storage write failed: "+err.Error())
+		fail("storage write failed: " + err.Error())
 		return
 	}
-	_ = s.Jobs.SetDone(ctx, jobID, key, int64(len(body)))
+	statusCtx, statusCancel := context.WithTimeout(context.Background(), jobStatusTimeout)
+	defer statusCancel()
+	if err := s.Jobs.SetDone(statusCtx, jobID, key, int64(len(body))); err != nil {
+		fail("could not finalize export: " + err.Error())
+	}
 }
 
 func (s *Service) build(ctx context.Context, job *repo.ExportJob) ([]byte, string, error) {
@@ -345,8 +387,9 @@ func (h *Handler) filename(job *repo.ExportJob) string {
 func (h *Handler) withURL(ctx context.Context, job *repo.ExportJob) map[string]any {
 	out := map[string]any{"job": job}
 	if job.Status == "done" && job.StorageKey != "" {
-		if url, err := h.Svc.Blob.PresignDownload(ctx, job.StorageKey, h.filename(job)); err == nil {
+		if url, err := h.Svc.Blob.PresignDownloadTTL(ctx, job.StorageKey, h.filename(job), exportDownloadTTL); err == nil {
 			out["download_url"] = url
+			out["download_expires_at"] = time.Now().UTC().Add(exportDownloadTTL)
 		}
 	}
 	return out

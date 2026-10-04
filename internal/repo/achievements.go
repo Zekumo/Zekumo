@@ -33,11 +33,55 @@ func (r AchievementDefs) Create(ctx context.Context, gameID string, d Achievemen
 }
 
 func (r AchievementDefs) Update(ctx context.Context, id string, d AchievementDef) (*AchievementDef, error) {
-	return scanAchDef(r.DB.QueryRow(ctx,
+	updated, _, err := r.UpdateWithTransitions(ctx, id, d)
+	return updated, err
+}
+
+// UpdateWithTransitions updates a definition and reconciles existing progress
+// rows against the new target. Lowering a target (or changing to an instant
+// achievement) must immediately unlock players who already meet it.
+func (r AchievementDefs) UpdateWithTransitions(ctx context.Context, id string, d AchievementDef) (*AchievementDef, []AchievementUnlock, error) {
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	updated, err := scanAchDef(tx.QueryRow(ctx,
 		`UPDATE achievement_defs
 		 SET name=$2, description=$3, icon_url=$4, rarity=$5, hidden=$6, type=$7, target=$8, sort_order=$9
 		 WHERE id=$1 RETURNING `+achDefCols,
 		id, d.Name, d.Description, d.IconURL, d.Rarity, d.Hidden, d.Type, d.Target, d.SortOrder))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	rows, err := tx.Query(ctx,
+		`UPDATE achievement_unlocks
+		 SET unlocked_at=now()
+		 WHERE achievement_id=$1 AND unlocked_at IS NULL AND progress >= $2
+		 RETURNING achievement_id, player_id, progress, unlocked_at`, id, d.Target)
+	if err != nil {
+		return nil, nil, err
+	}
+	var transitions []AchievementUnlock
+	for rows.Next() {
+		var u AchievementUnlock
+		if err := rows.Scan(&u.AchievementID, &u.PlayerID, &u.Progress, &u.UnlockedAt); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		transitions = append(transitions, u)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, nil, err
+	}
+	rows.Close()
+	if err := tx.Commit(ctx); err != nil {
+		return nil, nil, err
+	}
+	return updated, transitions, nil
 }
 
 func (r AchievementDefs) Delete(ctx context.Context, id string) error {
@@ -123,7 +167,9 @@ func (r AchievementUnlocks) UpsertWithTransition(ctx context.Context, achID, pla
 
 	var u AchievementUnlock
 	err = tx.QueryRow(ctx,
-		`WITH def AS (SELECT target, game_id FROM achievement_defs WHERE id=$1)
+		`WITH def AS (
+		   SELECT target, game_id FROM achievement_defs WHERE id=$1 FOR SHARE
+		 )
 		 INSERT INTO achievement_unlocks (achievement_id, player_id, progress, unlocked_at)
 		 SELECT $1, $2, $3,
 		        CASE WHEN $3 >= def.target THEN now() ELSE NULL END

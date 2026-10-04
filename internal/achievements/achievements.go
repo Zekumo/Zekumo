@@ -204,11 +204,13 @@ func (h *Handler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 	if httpx.Decode(w, r, &body) != nil {
 		return
 	}
+	body.Name = strings.TrimSpace(body.Name)
+	body.IconURL = strings.TrimSpace(body.IconURL)
 	if err := validateDefinition(&body); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid_definition", err.Error())
 		return
 	}
-	def, err := h.Svc.Defs.Update(r.Context(), id, body)
+	def, transitions, err := h.Svc.Defs.UpdateWithTransitions(r.Context(), id, body)
 	if err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			httpx.Error(w, http.StatusNotFound, "not_found", "achievement not found")
@@ -216,6 +218,16 @@ func (h *Handler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
+	}
+	if h.Events != nil {
+		for _, unlock := range transitions {
+			h.Events.Emit(def.GameID, "achievement.unlocked", map[string]any{
+				"achievement_id":  id,
+				"achievement_key": def.Key,
+				"player_id":       unlock.PlayerID,
+				"unlocked_at":     unlock.UnlockedAt,
+			})
+		}
 	}
 	httpx.JSON(w, http.StatusOK, def)
 }

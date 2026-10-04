@@ -34,11 +34,15 @@ func NewLocal(dir, baseURL, secret string, maxSize int64) (*Local, error) {
 }
 
 func (l *Local) PresignUpload(_ context.Context, key string) (string, error) {
-	return l.signURL("PUT", key, ""), nil
+	return l.signURL("PUT", key, "", PresignTTL), nil
 }
 
 func (l *Local) PresignDownload(_ context.Context, key, filename string) (string, error) {
-	return l.signURL("GET", key, filename), nil
+	return l.signURL("GET", key, filename, PresignTTL), nil
+}
+
+func (l *Local) PresignDownloadTTL(_ context.Context, key, filename string, ttl time.Duration) (string, error) {
+	return l.signURL("GET", key, filename, boundedPresignTTL(ttl)), nil
 }
 
 func (l *Local) Stat(_ context.Context, key string) (int64, error) {
@@ -138,8 +142,8 @@ func (l *Local) path(key string) string {
 	return clean
 }
 
-func (l *Local) signURL(method, key, filename string) string {
-	exp := time.Now().Add(PresignTTL).Unix()
+func (l *Local) signURL(method, key, filename string, ttl time.Duration) string {
+	exp := time.Now().Add(boundedPresignTTL(ttl)).Unix()
 	q := url.Values{}
 	q.Set("key", key)
 	q.Set("exp", strconv.FormatInt(exp, 10))

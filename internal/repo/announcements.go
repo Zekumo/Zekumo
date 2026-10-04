@@ -96,6 +96,21 @@ func (r Announcements) PublicListByAppID(ctx context.Context, appID, afterID str
 	return r.PublicListByAppIDFiltered(ctx, appID, afterID, "", "", limit)
 }
 
+// CursorExistsByAppID prevents a cursor from another game from influencing
+// this game's incremental timeline and lets the handler reject stale/unknown
+// cursor IDs as a client error instead of silently returning an empty page.
+func (r Announcements) CursorExistsByAppID(ctx context.Context, appID, id string) (bool, error) {
+	var exists bool
+	err := r.DB.QueryRow(ctx,
+		`SELECT EXISTS(
+		   SELECT 1 FROM announcements a
+		   JOIN games g ON g.id=a.game_id
+		   WHERE g.app_id=$1 AND a.id=$2::uuid
+		 )`, appID, id,
+	).Scan(&exists)
+	return exists, err
+}
+
 // PublicListByAppIDFiltered applies optional platform and channel targeting.
 // An empty target on an announcement means that it is visible to every client.
 func (r Announcements) PublicListByAppIDFiltered(ctx context.Context, appID, afterID, platform, channel string, limit int) ([]Announcement, error) {
@@ -109,10 +124,12 @@ func (r Announcements) PublicListByAppIDFiltered(ctx context.Context, appID, aft
 		 WHERE g.app_id = $1
 		   AND a.active = TRUE
 		   AND (a.expires_at IS NULL OR a.expires_at > now())
-		   AND ($3 = '' OR a.platform = '' OR a.platform = $3)
-		   AND ($4 = '' OR a.channel = '' OR a.channel = $4)
+		   AND (a.platform = '' OR a.platform = $3)
+		   AND (a.channel = '' OR a.channel = $4)
 		   AND ($2 = '' OR (a.created_at, a.id) > (
-		       SELECT cursor.created_at, cursor.id FROM announcements cursor WHERE cursor.id = $2::uuid
+		       SELECT cursor.created_at, cursor.id
+		       FROM announcements cursor
+		       WHERE cursor.id = $2::uuid AND cursor.game_id = a.game_id
 		   ))
 		 ORDER BY a.created_at ASC, a.id ASC
 			 LIMIT $5`,

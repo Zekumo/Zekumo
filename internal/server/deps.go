@@ -117,7 +117,7 @@ func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob stora
 	ssoProvider := sso.Provider{Accounts: accounts, Players: players, Tickets: tickets}
 
 	chatSvc := chat.NewService(repo.Chat{DB: st.DB}, cfg.BannedWordsFile)
-	hub := realtime.NewHub(chatSvc, issuer)
+	hub := realtime.NewHub(ctx, st.RDB, chatSvc, issuer, repo.PlayerBlocks{DB: st.DB})
 
 	lbSvc := &leaderboard.Service{RDB: st.RDB, Scores: repo.Scores{DB: st.DB}, Players: players}
 	fnRuntime := &funcs.Runtime{

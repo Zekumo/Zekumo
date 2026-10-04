@@ -1,0 +1,272 @@
+name: PRD feature validation
+
+on:
+  push:
+    branches: [ci/prd-features-validation]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prd-features-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: 1.26.4
+  NODE_VERSION: 24
+  DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/minicloud?sslmode=disable
+  REDIS_ADDR: 127.0.0.1:6379
+  JWT_SECRET: ci-only-jwt-secret-at-least-32-characters
+  ADMIN_USERNAME: admin
+  ADMIN_PASSWORD: admin123
+  FUNC_HTTP_ALLOW_PRIVATE: "true"
+
+jobs:
+  unit-and-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm --prefix sdk install --ignore-scripts --no-package-lock --no-audit --no-fund
+      - run: go test ./...
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: (cd sdk-go && go test ./...)
+      - run: npm --prefix sdk run build
+      - run: python3 tests/acceptance/prd_static.py
+      - run: node tests/acceptance/sdk-http.mjs
+      - run: node tests/acceptance/sdk-realtime.mjs
+      - run: node tests/acceptance/admin-social-ui.mjs
+      - run: git diff --check
+
+  fresh-install-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: minicloud
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d minicloud"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:8
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Build server and smoke client
+        run: |
+          go build -o /tmp/minicloud-server ./cmd/server
+          go build -o /tmp/minicloud-smoke ./cmd/smoketest
+      - name: Start server
+        env:
+          MINICLOUD_ADDR: 127.0.0.1:18081
+          BASE_URL: http://127.0.0.1:18081
+          LOCAL_DATA_DIR: /tmp/minicloud-ci-storage
+        run: |
+          /tmp/minicloud-server >/tmp/minicloud-server.log 2>&1 &
+          echo $! >/tmp/minicloud-server.pid
+          for i in {1..60}; do
+            curl -fsS http://127.0.0.1:18081/readyz && exit 0
+            sleep 1
+          done
+          cat /tmp/minicloud-server.log
+          exit 1
+      - name: Run complete HTTP/WebSocket smoke
+        env:
+          MINICLOUD_URL: http://127.0.0.1:18081
+          MINICLOUD_WS: ws://127.0.0.1:18081
+        run: /tmp/minicloud-smoke
+      - name: Verify fresh migration set
+        run: |
+          test "$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM schema_migrations')" = 21
+          test "$(psql "$DATABASE_URL" -Atc "SELECT min(version)||':'||max(version) FROM schema_migrations")" = '0001_core.sql:0021_social_integrity.sql'
+      - name: Stop server
+        if: always()
+        run: |
+          test ! -f /tmp/minicloud-server.pid || kill -TERM "$(cat /tmp/minicloud-server.pid)" || true
+          test ! -f /tmp/minicloud-server.log || tail -100 /tmp/minicloud-server.log
+
+  populated-upgrade:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: minicloud
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d minicloud"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:8
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Apply published baseline migrations 0001 through 0019
+        run: |
+          psql "$DATABASE_URL" <<'SQL'
+          CREATE TABLE schema_migrations (
+            version TEXT PRIMARY KEY,
+            applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+          SQL
+          for migration in internal/store/migrations/00{01..19}_*.sql; do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+              "INSERT INTO schema_migrations(version) VALUES ('$(basename "$migration")')"
+          done
+      - name: Seed valid populated 0019 state
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO games (id, app_id, app_secret, name)
+          VALUES ('00000000-0000-0000-0000-000000000001', 'mc_upgrade', 'secret', 'Upgrade fixture');
+          INSERT INTO players (id, game_id, provider, identifier, nickname)
+          VALUES
+            ('00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000001', 'guest', 'a', 'Alice'),
+            ('00000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000001', 'guest', 'b', 'Bob');
+          INSERT INTO friendships (game_id, player_a, player_b)
+          VALUES ('00000000-0000-0000-0000-000000000001',
+                  '00000000-0000-0000-0000-000000000011',
+                  '00000000-0000-0000-0000-000000000012');
+          INSERT INTO currencies (id, game_id, name, display_name)
+          VALUES ('00000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-000000000001', 'gold', 'Gold');
+          INSERT INTO currency_balances (currency_id, player_id, balance)
+          VALUES ('00000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-000000000011', 42);
+          INSERT INTO mail_messages (id, game_id, title, expires_at)
+          VALUES ('00000000-0000-0000-0000-000000000031', '00000000-0000-0000-0000-000000000001', 'Legacy mail', now() + interval '1 day');
+          INSERT INTO mail_recipients (mail_id, player_id)
+          VALUES ('00000000-0000-0000-0000-000000000031', '00000000-0000-0000-0000-000000000011');
+          INSERT INTO retention_daily (game_id, date, cohort, d1, d7, d30)
+          VALUES ('00000000-0000-0000-0000-000000000001', current_date - 40, 2, 1, 1, 1);
+          SQL
+      - name: Upgrade to the current schema and restart without replay
+        run: |
+          go build -o /tmp/minicloud-server ./cmd/server
+          MINICLOUD_ADDR=127.0.0.1:18081 BASE_URL=http://127.0.0.1:18081 \
+            LOCAL_DATA_DIR=/tmp/minicloud-upgrade-storage \
+            /tmp/minicloud-server >/tmp/upgrade-1.log 2>&1 &
+          pid=$!
+          for i in {1..60}; do curl -fsS http://127.0.0.1:18081/readyz && break; sleep 1; done
+          curl -fsS http://127.0.0.1:18081/readyz
+          kill -TERM "$pid"
+          wait "$pid"
+          test "$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM schema_migrations')" = 21
+          test "$(psql "$DATABASE_URL" -Atc "SELECT recipient_count FROM mail_messages WHERE id='00000000-0000-0000-0000-000000000031'")" = 1
+          test "$(psql "$DATABASE_URL" -Atc "SELECT balance FROM currency_balances WHERE player_id='00000000-0000-0000-0000-000000000011'")" = 42
+          test "$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM friendships')" = 1
+          test "$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM retention_daily WHERE d1 IS NULL AND d7 IS NULL AND d30 IS NULL')" = 1
+          MINICLOUD_ADDR=127.0.0.1:18081 BASE_URL=http://127.0.0.1:18081 \
+            LOCAL_DATA_DIR=/tmp/minicloud-upgrade-storage \
+            /tmp/minicloud-server >/tmp/upgrade-2.log 2>&1 &
+          pid=$!
+          for i in {1..60}; do curl -fsS http://127.0.0.1:18081/readyz && break; sleep 1; done
+          curl -fsS http://127.0.0.1:18081/readyz
+          kill -TERM "$pid"
+          wait "$pid"
+          test "$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM schema_migrations')" = 21
+          test "$(grep -c 'applied migration 0020\|applied migration 0021' /tmp/upgrade-2.log)" = 0
+      - name: Print logs on failure
+        if: failure()
+        run: cat /tmp/upgrade-1.log /tmp/upgrade-2.log || true
+
+  cluster-and-recovery:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: minicloud
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d minicloud"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install and start disposable Redis
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-server
+          cat >/tmp/start-redis.sh <<'SH'
+          #!/usr/bin/env bash
+          set -e
+          if redis-cli ping 2>/dev/null | grep -q PONG; then exit 0; fi
+          redis-server --daemonize yes --save '' --appendonly no --bind 127.0.0.1 --port 6379
+          for i in {1..50}; do redis-cli ping | grep -q PONG && exit 0; sleep .1; done
+          exit 1
+          SH
+          chmod +x /tmp/start-redis.sh
+          /tmp/start-redis.sh
+      - name: Build SDK and two server instances
+        run: |
+          npm --prefix sdk install --ignore-scripts --no-package-lock --no-audit --no-fund
+          npm --prefix sdk run build
+          go build -o /tmp/minicloud-server ./cmd/server
+          MINICLOUD_ADDR=127.0.0.1:18081 BASE_URL=http://127.0.0.1:18081 \
+            LOCAL_DATA_DIR=/tmp/minicloud-cluster-a \
+            /tmp/minicloud-server >/tmp/cluster-a.log 2>&1 & echo $! >/tmp/cluster-a.pid
+          MINICLOUD_ADDR=127.0.0.1:18082 BASE_URL=http://127.0.0.1:18082 \
+            LOCAL_DATA_DIR=/tmp/minicloud-cluster-b \
+            /tmp/minicloud-server >/tmp/cluster-b.log 2>&1 & echo $! >/tmp/cluster-b.pid
+          for port in 18081 18082; do
+            for i in {1..60}; do curl -fsS "http://127.0.0.1:$port/readyz" && break; sleep 1; done
+            curl -fsS "http://127.0.0.1:$port/readyz"
+          done
+      - name: Verify cross-instance SDK/WebSocket behavior
+        env:
+          MINICLOUD_A: http://127.0.0.1:18081
+          MINICLOUD_B: http://127.0.0.1:18082
+        run: node tests/acceptance/cluster-ws.mjs
+      - name: Verify Redis outage and SDK recovery
+        env:
+          MINICLOUD_A: http://127.0.0.1:18081
+          MINICLOUD_REDIS_OUTAGE: "1"
+          REDIS_START_SCRIPT: /tmp/start-redis.sh
+          CLUSTER_TEST_TIMEOUT_MS: "10000"
+        run: node tests/acceptance/redis-outage-ws.mjs
+      - name: Stop fixtures and print logs
+        if: always()
+        run: |
+          for pidfile in /tmp/cluster-a.pid /tmp/cluster-b.pid; do
+            test ! -f "$pidfile" || kill -TERM "$(cat "$pidfile")" || true
+          done
+          redis-cli shutdown nosave || true
+          tail -100 /tmp/cluster-a.log || true
+          tail -100 /tmp/cluster-b.log || true

@@ -124,4 +124,43 @@ func phaseAnnouncements(s *state) {
 		}
 	}
 	step("targeted announcement not returned", boolErr(!foundTarget, "targeted notice leaked to non-matching client"))
+	filtered.Announcements = nil
+	step("targeted announcement hidden when selectors omitted", call("GET", "/v1/apps/"+s.appID+"/announcements", "", nil, &filtered))
+	foundTarget = false
+	for _, a := range filtered.Announcements {
+		if a.ID == targeted.ID {
+			foundTarget = true
+		}
+	}
+	step("omitted selectors return global notices only", boolErr(!foundTarget,
+		"targeted notice leaked to a client without selectors"))
+	filtered.Announcements = nil
+	step("matching target receives announcement", call("GET", "/v1/apps/"+s.appID+"/announcements?platform=windows&channel=beta", "", nil, &filtered))
+	foundTarget = false
+	for _, a := range filtered.Announcements {
+		if a.ID == targeted.ID {
+			foundTarget = true
+		}
+	}
+	step("matching targeted announcement returned", boolErr(foundTarget, "matching client did not receive targeted notice"))
+
+	step("malformed cursor rejected", expectErr(call("GET",
+		"/v1/apps/"+s.appID+"/announcements?after_id=not-a-uuid", "", nil, nil)))
+	step("unknown cursor rejected", expectErr(call("GET",
+		"/v1/apps/"+s.appID+"/announcements?after_id=00000000-0000-0000-0000-000000000000", "", nil, nil)))
+
+	// A normal text edit preserves the original absolute expiry.
+	var timed struct {
+		ID        string `json:"id"`
+		ExpiresAt string `json:"expires_at"`
+	}
+	step("create timed announcement", call("POST", "/admin/api/games/"+s.gameID+"/announcements", s.adminToken,
+		map[string]any{"title": "短时公告", "expires_in_secs": 3600}, &timed))
+	var timedUpdated struct {
+		ExpiresAt string `json:"expires_at"`
+	}
+	step("edit timed announcement without expiry", call("PUT", "/admin/api/announcements/"+timed.ID, s.adminToken,
+		map[string]any{"title": "短时公告（改）", "body": "正文已更新", "importance": "info"}, &timedUpdated))
+	step("timed edit preserves expiry", boolErr(timed.ExpiresAt != "" && timedUpdated.ExpiresAt == timed.ExpiresAt,
+		"expiry changed from %q to %q", timed.ExpiresAt, timedUpdated.ExpiresAt))
 }

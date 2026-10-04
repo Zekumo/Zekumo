@@ -10,6 +10,10 @@ async function api(method, path, body) {
     method,
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
+    // Navigating away cancels obsolete reads so an older page cannot overwrite
+    // the new route when its slower response arrives. Mutations are never
+    // cancelled after the operator has confirmed them.
+    signal: method === 'GET' ? window.__routeAbort?.signal : undefined,
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && path !== '/admin/api/login') { logout(); throw new Error('登录已过期'); }
@@ -140,16 +144,33 @@ function openDialog({ title, body, confirmText = '确定', danger = false, onCon
       <h3>${esc(title)}</h3>
       <div class="dialog-body">${body}</div>
       <div class="dialog-actions">
-        <button class="btn text" onclick="closeDialog()">取消</button>
+        <button class="btn text" id="dlgCancel" onclick="closeDialog()">取消</button>
         <button class="btn filled ${danger ? 'danger' : ''}" id="dlgConfirm">${esc(confirmText)}</button>
       </div>
     </div>`;
   document.getElementById('scrim').classList.remove('hidden');
   document.getElementById('dlgConfirm').onclick = async () => {
+    const confirm = document.getElementById('dlgConfirm');
+    const cancel = document.getElementById('dlgCancel');
+    if (!confirm || confirm.disabled) return;
+    const originalText = confirm.textContent;
+    confirm.disabled = true;
+    confirm.setAttribute('aria-busy', 'true');
+    confirm.textContent = '处理中…';
+    if (cancel) cancel.disabled = true;
     try {
       await onConfirm();
       closeDialog();
-    } catch (e) { toast(e.message); }
+    } catch (e) {
+      toast(e.message);
+      // The dialog may have been replaced while the request was running.
+      if (confirm.isConnected) {
+        confirm.disabled = false;
+        confirm.removeAttribute('aria-busy');
+        confirm.textContent = originalText;
+      }
+      if (cancel?.isConnected) cancel.disabled = false;
+    }
   };
   const first = host.querySelector('input, textarea, select');
   if (first) first.focus();

@@ -34,7 +34,7 @@ type Handler struct {
 // and the authoritative database lookup used at login.
 type BanChecker interface {
 	TokenBanned(ctx context.Context, playerID string) bool
-	ActiveBan(ctx context.Context, playerID string) *repo.PlayerBan
+	ActiveBan(ctx context.Context, playerID string) (*repo.PlayerBan, error)
 }
 
 // AttemptLimiter throttles repeated failures against one identity. Per-IP
@@ -56,7 +56,7 @@ type Emitter interface {
 // ActivityRecorder feeds the stats pipeline; nil disables collection.
 type ActivityRecorder interface {
 	RecordActive(gameID, playerID string)
-	RecordLogin(gameID string)
+	RecordLogin(gameID, playerID string)
 	RecordNewPlayer(gameID string)
 }
 
@@ -161,7 +161,8 @@ func (h *Handler) gameFor(w http.ResponseWriter, r *http.Request, appID string) 
 
 func (h *Handler) finishLogin(w http.ResponseWriter, r *http.Request, player *repo.Player) {
 	if h.Bans != nil {
-		if ban := h.Bans.ActiveBan(r.Context(), player.ID); ban != nil {
+		ban, err := h.Bans.ActiveBan(r.Context(), player.ID)
+		if err == nil && ban != nil {
 			httpx.JSON(w, http.StatusForbidden, map[string]any{
 				"error": map[string]string{
 					"code":    "player_banned",
@@ -172,8 +173,21 @@ func (h *Handler) finishLogin(w http.ResponseWriter, r *http.Request, player *re
 			})
 			return
 		}
+		if err == nil {
+			httpx.Error(w, http.StatusServiceUnavailable, "ban_check_unavailable", "unable to verify account status")
+			return
+		}
+		if !errors.Is(err, repo.ErrNotFound) {
+			httpx.Error(w, http.StatusServiceUnavailable, "ban_check_unavailable", "unable to verify account status")
+			return
+		}
+		// Only an authoritative not-found result proves a denormalized flag is
+		// stale (for example, after a timed ban expires).
 		if player.Banned {
-			_ = h.Players.SetBanned(r.Context(), player.ID, false)
+			if err := h.Players.SetBanned(r.Context(), player.ID, false); err != nil {
+				httpx.Error(w, http.StatusInternalServerError, "internal", "unable to clear expired ban status")
+				return
+			}
 		}
 	} else if player.Banned {
 		httpx.Error(w, http.StatusForbidden, "banned", "this account is banned")
@@ -194,7 +208,7 @@ func (h *Handler) finishLogin(w http.ResponseWriter, r *http.Request, player *re
 		h.Events.Emit(player.GameID, "player.login", info)
 	}
 	if h.Stats != nil {
-		h.Stats.RecordLogin(player.GameID)
+		h.Stats.RecordLogin(player.GameID, player.ID)
 		if isNew {
 			h.Stats.RecordNewPlayer(player.GameID)
 		}

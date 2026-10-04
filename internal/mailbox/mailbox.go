@@ -7,8 +7,11 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"minicloud/internal/auth"
@@ -19,9 +22,44 @@ import (
 const (
 	maxRecipients    = 1000
 	maxInbox         = 100
+	maxTitleLen      = 200
 	defaultExpiresIn = 30 * 24 * time.Hour
 	maxExpiresIn     = 365 * 24 * time.Hour
 )
+
+func normalizeRecipients(input []string) ([]string, error) {
+	seen := make(map[string]struct{}, len(input))
+	out := make([]string, 0, len(input))
+	for _, raw := range input {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			return nil, errors.New("recipient ids must not be empty")
+		}
+		if _, err := uuid.Parse(id); err != nil {
+			return nil, errors.New("recipient ids must be UUIDs")
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+func expiryDuration(seconds int64) (time.Duration, error) {
+	if seconds < 0 {
+		return 0, errors.New("expires_in must be >= 0")
+	}
+	if seconds == 0 {
+		return defaultExpiresIn, nil
+	}
+	maxSeconds := int64(maxExpiresIn / time.Second)
+	if seconds > maxSeconds {
+		return 0, errors.New("expires_in must not exceed 365 days")
+	}
+	return time.Duration(seconds) * time.Second, nil
+}
 
 type Handler struct {
 	DB         *pgxpool.Pool
@@ -150,8 +188,13 @@ func (h *Handler) AdminSend(w http.ResponseWriter, r *http.Request) {
 	if httpx.Decode(w, r, &req) != nil {
 		return
 	}
+	req.Title = strings.TrimSpace(req.Title)
 	if req.Title == "" {
 		httpx.Error(w, http.StatusBadRequest, "missing_field", "title is required")
+		return
+	}
+	if utf8.RuneCountInString(req.Title) > maxTitleLen {
+		httpx.Error(w, http.StatusBadRequest, "bad_title", "title must be at most 200 characters")
 		return
 	}
 
@@ -163,6 +206,14 @@ func (h *Handler) AdminSend(w http.ResponseWriter, r *http.Request) {
 	} else if err := json.Unmarshal(req.Recipients, &recipients); err != nil || len(recipients) == 0 {
 		httpx.Error(w, http.StatusBadRequest, "bad_recipients", `recipients must be "all" or a non-empty array of player ids`)
 		return
+	}
+	if !broadcast {
+		var err error
+		recipients, err = normalizeRecipients(recipients)
+		if err != nil || len(recipients) == 0 {
+			httpx.Error(w, http.StatusBadRequest, "bad_recipients", "recipient ids must not be empty")
+			return
+		}
 	}
 	if len(recipients) > maxRecipients {
 		httpx.Error(w, http.StatusBadRequest, "too_many_recipients", "at most 1000 recipients per mail")
@@ -199,25 +250,25 @@ func (h *Handler) AdminSend(w http.ResponseWriter, r *http.Request) {
 		rewards = []byte("[]")
 	}
 
-	expiresIn := time.Duration(req.ExpiresIn) * time.Second
-	if expiresIn <= 0 {
-		expiresIn = defaultExpiresIn
-	}
-	if expiresIn > maxExpiresIn {
-		expiresIn = maxExpiresIn
-	}
-
-	m, err := h.Mail.Create(r.Context(), gameID, broadcast, req.Title, req.Body, rewards, time.Now().Add(expiresIn))
+	expiresIn, err := expiryDuration(req.ExpiresIn)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+		httpx.Error(w, http.StatusBadRequest, "bad_expiry", err.Error())
 		return
 	}
-	delivered := 0
-	if !broadcast {
-		if delivered, err = h.Mail.AddRecipients(r.Context(), m.ID, gameID, recipients); err != nil {
-			httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+
+	m, delivered, err := h.Mail.CreateWithRecipients(r.Context(), gameID, broadcast, recipients,
+		req.Title, req.Body, rewards, time.Now().Add(expiresIn))
+	if err != nil {
+		if errors.Is(err, repo.ErrInvalidRewards) {
+			httpx.Error(w, http.StatusBadRequest, "bad_reward", "one or more reward currencies are no longer available")
 			return
 		}
+		if errors.Is(err, repo.ErrInvalidRecipients) {
+			httpx.Error(w, http.StatusBadRequest, "bad_recipients", "one or more players do not belong to this game")
+			return
+		}
+		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+		return
 	}
 	httpx.JSON(w, http.StatusCreated, map[string]any{"mail": m, "delivered": delivered})
 }
@@ -230,6 +281,9 @@ func (h *Handler) AdminList(w http.ResponseWriter, r *http.Request) {
 		limit = 50
 	}
 	offset, _ := strconv.Atoi(q.Get("offset"))
+	if offset < 0 {
+		offset = 0
+	}
 	items, err := h.Mail.AdminList(r.Context(), r.PathValue("id"), limit, offset)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())

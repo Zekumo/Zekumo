@@ -46,12 +46,24 @@ func phaseAchievements(s *state) {
 	step("admin list achievements", call("GET", "/admin/api/games/"+s.gameID+"/achievements", s.adminToken, nil, &achList))
 	step("two achievements created", boolErr(len(achList.Achievements) == 2,
 		"expected 2, got %d", len(achList.Achievements)))
+	var hidden struct {
+		ID string `json:"id"`
+	}
+	step("admin create hidden achievement", call("POST", "/admin/api/games/"+s.gameID+"/achievements", s.adminToken,
+		map[string]any{
+			"key": "secret_room", "name": "密室", "description": "找到隐藏房间",
+			"icon_url": "https://example.com/secret.png", "hidden": true, "type": "instant",
+		}, &hidden))
 
 	// Player list: neither unlocked yet.
 	var playerList struct {
 		Achievements []struct {
-			Key      string `json:"key"`
-			Unlocked bool   `json:"unlocked"`
+			ID          string `json:"id"`
+			Key         string `json:"key"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			IconURL     string `json:"icon_url"`
+			Unlocked    bool   `json:"unlocked"`
 		} `json:"achievements"`
 	}
 	step("alice list achievements (none unlocked)", call("GET", "/v1/achievements", s.alice.Token, nil, &playerList))
@@ -62,6 +74,14 @@ func phaseAchievements(s *state) {
 		}
 	}
 	step("none unlocked initially", boolErr(!anyUnlocked, "expected no unlocked achievements"))
+	var hiddenRedacted bool
+	for _, a := range playerList.Achievements {
+		if a.ID == hidden.ID {
+			hiddenRedacted = a.Name == "???" && a.Description == "" && a.IconURL == ""
+		}
+	}
+	step("hidden achievement details redacted", boolErr(hiddenRedacted,
+		"locked hidden achievement exposed its details"))
 
 	// Admin unlocks instant achievement for Alice.
 	step("admin unlock for alice", call("POST", "/admin/api/achievements/"+achInstant.ID+"/unlock", s.adminToken,
@@ -119,13 +139,16 @@ func phaseAchievements(s *state) {
 	step("veteran not unlocked at 5/10", boolErr(!veteranEntry.Unlocked, "should not be unlocked yet"))
 	step("veteran progress is 5", boolErr(veteranEntry.Progress == 5, "progress = %d, want 5", veteranEntry.Progress))
 
-	// Complete progress: advance to 10 — should auto-unlock.
-	step("complete progress (10/10)", call("POST", "/admin/api/achievements/"+achProgress.ID+"/unlock", s.adminToken,
-		map[string]any{"player_id": s.alice.Player.ID, "progress": 10}, nil))
+	// Lowering a definition target reconciles existing progress immediately.
+	step("lower progress target to current progress", call("PUT", "/admin/api/achievements/"+achProgress.ID, s.adminToken,
+		map[string]any{
+			"name": "老兵", "description": "完成 5 场战斗", "rarity": "rare",
+			"type": "progress", "target": 5,
+		}, nil))
 	var completedList struct {
 		Unlocked []struct{ Key string } `json:"unlocked"`
 	}
-	step("alice unlocked after completion", call("GET", "/v1/achievements/unlocked", s.alice.Token, nil, &completedList))
+	step("alice unlocked after target edit", call("GET", "/v1/achievements/unlocked", s.alice.Token, nil, &completedList))
 	step("two achievements unlocked", boolErr(len(completedList.Unlocked) == 2,
 		"expected 2 unlocked, got %d", len(completedList.Unlocked)))
 

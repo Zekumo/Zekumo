@@ -10,7 +10,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrAlreadyClaimed = errors.New("mail rewards already claimed")
+var (
+	ErrAlreadyClaimed    = errors.New("mail rewards already claimed")
+	ErrInvalidRecipients = errors.New("one or more mail recipients are invalid")
+	ErrInvalidRewards    = errors.New("one or more mail rewards are invalid")
+)
 
 type Mail struct{ DB *pgxpool.Pool }
 
@@ -32,6 +36,100 @@ func (r Mail) Create(ctx context.Context, gameID string, broadcast bool, title, 
 		gameID, broadcast, title, body, rewards, expiresAt))
 }
 
+// CreateWithRecipients atomically creates a message and its directed delivery
+// rows. It rejects the whole request if any target does not belong to the game,
+// preventing an orphan message or a silently partial delivery.
+func (r Mail) CreateWithRecipients(ctx context.Context, gameID string, broadcast bool, playerIDs []string, title, body string, rewards json.RawMessage, expiresAt time.Time) (*MailMessage, int, error) {
+	var rewardList []MailReward
+	if err := json.Unmarshal(rewards, &rewardList); err != nil {
+		return nil, 0, ErrInvalidRewards
+	}
+	seenRewards := make(map[string]struct{}, len(rewardList))
+	for _, reward := range rewardList {
+		if reward.CurrencyID == "" || reward.Amount <= 0 {
+			return nil, 0, ErrInvalidRewards
+		}
+		if _, duplicate := seenRewards[reward.CurrencyID]; duplicate {
+			return nil, 0, ErrInvalidRewards
+		}
+		seenRewards[reward.CurrencyID] = struct{}{}
+	}
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	// Serialize currency definition changes with mail creation, then take key
+	// share locks on every referenced definition. An admin cannot delete a
+	// currency between handler validation and committing the reward payload.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, gameID); err != nil {
+		return nil, 0, err
+	}
+	if len(rewardList) > 0 {
+		rows, err := tx.Query(ctx,
+			`SELECT c.id FROM currencies c
+			 JOIN jsonb_array_elements($2::jsonb) reward
+			   ON c.id::text = reward->>'currency_id'
+			 WHERE c.game_id=$1
+			 FOR KEY SHARE OF c`, gameID, rewards)
+		if err != nil {
+			return nil, 0, err
+		}
+		matched := 0
+		for rows.Next() {
+			matched++
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, 0, err
+		}
+		rows.Close()
+		if matched != len(rewardList) {
+			return nil, 0, ErrInvalidRewards
+		}
+	}
+
+	var targetCount int
+	if broadcast {
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM players WHERE game_id=$1`, gameID).Scan(&targetCount); err != nil {
+			return nil, 0, err
+		}
+	} else {
+		if err := tx.QueryRow(ctx,
+			`SELECT count(*) FROM players WHERE game_id=$1 AND id = ANY($2::uuid[])`,
+			gameID, playerIDs).Scan(&targetCount); err != nil {
+			return nil, 0, err
+		}
+		if targetCount != len(playerIDs) {
+			return nil, 0, ErrInvalidRecipients
+		}
+	}
+
+	m, err := scanMail(tx.QueryRow(ctx,
+		`INSERT INTO mail_messages (game_id, broadcast, title, body, rewards, expires_at, recipient_count)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING `+mailCols,
+		gameID, broadcast, title, body, rewards, expiresAt, targetCount))
+	if err != nil {
+		return nil, 0, err
+	}
+	if !broadcast {
+		tag, err := tx.Exec(ctx,
+			`INSERT INTO mail_recipients (mail_id, player_id)
+			 SELECT $1, p.id FROM players p WHERE p.id = ANY($2::uuid[]) AND p.game_id = $3`,
+			m.ID, playerIDs, gameID)
+		if err != nil {
+			return nil, 0, err
+		}
+		if int(tag.RowsAffected()) != targetCount {
+			return nil, 0, ErrInvalidRecipients
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, 0, err
+	}
+	return m, targetCount, nil
+}
+
 func (r Mail) ByID(ctx context.Context, id string) (*MailMessage, error) {
 	return scanMail(r.DB.QueryRow(ctx, `SELECT `+mailCols+` FROM mail_messages WHERE id=$1`, id))
 }
@@ -41,7 +139,7 @@ func (r Mail) ByID(ctx context.Context, id string) (*MailMessage, error) {
 func (r Mail) AddRecipients(ctx context.Context, mailID, gameID string, playerIDs []string) (int, error) {
 	tag, err := r.DB.Exec(ctx,
 		`INSERT INTO mail_recipients (mail_id, player_id)
-		 SELECT $1, p.id FROM players p WHERE p.id = ANY($2) AND p.game_id = $3
+		 SELECT $1, p.id FROM players p WHERE p.id = ANY($2::uuid[]) AND p.game_id = $3
 		 ON CONFLICT DO NOTHING`,
 		mailID, playerIDs, gameID)
 	if err != nil {
@@ -148,7 +246,7 @@ func (r Mail) ClaimTx(ctx context.Context, tx pgx.Tx, m *MailMessage, playerID s
 func (r Mail) AdminList(ctx context.Context, gameID string, limit, offset int) ([]MailAdminItem, error) {
 	rows, err := r.DB.Query(ctx,
 		`SELECT `+mailCols+`,
-		        (SELECT count(*) FROM mail_recipients x WHERE x.mail_id = m.id),
+		        m.recipient_count,
 		        (SELECT count(*) FROM mail_recipients x WHERE x.mail_id = m.id AND x.read_at IS NOT NULL),
 		        (SELECT count(*) FROM mail_recipients x WHERE x.mail_id = m.id AND x.claimed_at IS NOT NULL)
 		 FROM mail_messages m WHERE game_id=$1

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"minicloud/internal/httpx"
 	"minicloud/internal/repo"
 )
@@ -23,6 +25,23 @@ type Handler struct {
 func (h *Handler) PublicList(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("app_id")
 	afterID := r.URL.Query().Get("after_id")
+	if afterID != "" {
+		parsed, err := uuid.Parse(afterID)
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "bad_cursor", "after_id must be a UUID")
+			return
+		}
+		afterID = parsed.String()
+		exists, err := h.Repo.CursorExistsByAppID(r.Context(), appID, afterID)
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+			return
+		}
+		if !exists {
+			httpx.Error(w, http.StatusBadRequest, "bad_cursor", "after_id is not an announcement for this app")
+			return
+		}
+	}
 	platform := strings.TrimSpace(r.URL.Query().Get("platform"))
 	channel := strings.TrimSpace(r.URL.Query().Get("channel"))
 

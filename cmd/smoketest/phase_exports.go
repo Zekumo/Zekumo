@@ -23,6 +23,13 @@ const exportWait = 30 * time.Second
 // but produced an unreadable file is still a failure.
 func phaseExports(s *state) {
 	fmt.Println("\n-- data exports --")
+	var audience struct {
+		Players []struct {
+			ID string `json:"id"`
+		} `json:"players"`
+	}
+	audienceErr := call("GET", "/admin/api/games/"+s.gameID+"/players?limit=200", s.adminToken, nil, &audience)
+	step("capture current export audience", audienceErr)
 
 	// History starts empty; an empty array, not null, so the console can
 	// iterate it.
@@ -78,7 +85,18 @@ func phaseExports(s *state) {
 				doc.GameID == s.gameID && doc.Scope == "all" && doc.GeneratedAt != "",
 				"envelope = game %q scope %q at %q", doc.GameID, doc.Scope, doc.GeneratedAt))
 			players := doc.Players
-			step("json export has both players", boolErr(len(players) == 2, "got %d players, want 2", len(players)))
+			if audienceErr == nil {
+				step("json export has the complete current audience", boolErr(len(players) == len(audience.Players),
+					"got %d players, want %d", len(players), len(audience.Players)))
+			}
+			present := make(map[string]bool, len(players))
+			for _, player := range players {
+				present[player.ID] = true
+			}
+			step("json export contains Alice and Bob", boolErr(
+				present[s.alice.Player.ID] && present[s.bob.Player.ID],
+				"required players missing from export: alice=%v bob=%v",
+				present[s.alice.Player.ID], present[s.bob.Player.ID]))
 
 			var alice struct {
 				found   bool

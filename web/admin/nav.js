@@ -97,6 +97,14 @@ function renderSwitcher() {
 }
 
 async function route() {
+  const routeID = (window.__routeID || 0) + 1;
+  window.__routeID = routeID;
+  window.__routeAbort?.abort();
+  window.__routeAbort = new AbortController();
+  // Back/forward navigation dismisses a modal from the previous page instead
+  // of leaving it floating over unrelated content.
+  closeDialog();
+
   const { gameId, page } = currentRoute();
   const scope = gameId ? 'game' : 'platform';
   let def = ROUTES[page];
@@ -123,8 +131,9 @@ async function route() {
   try {
     await def.render(host);
   } catch (e) {
+    if (routeID !== window.__routeID || e.name === 'AbortError') return;
     host.innerHTML = `<h1 class="page-title">${esc(def.title)}</h1>` +
-      emptyState('⚠️', '加载失败', esc(e.message));
+      emptyState('⚠️', '加载失败', `${esc(e.message)}<div style="margin-top:16px"><button class="btn outlined" onclick="route()">重试</button></div>`);
   }
 }
 

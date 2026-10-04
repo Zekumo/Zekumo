@@ -35,7 +35,8 @@ function announcementRow(a) {
 
 function announcementDialog(a = null) {
   const editing = Boolean(a);
-  const expirySeconds = a?.expires_at ? Math.max(1, Math.ceil((new Date(a.expires_at) - Date.now()) / 1000)) : '';
+  const expirySeconds = a?.expires_at && new Date(a.expires_at) > new Date()
+    ? Math.ceil((new Date(a.expires_at) - Date.now()) / 1000) : '';
   openDialog({
     title: editing ? `编辑公告「${a.title}」` : '发布公告',
     body: `${dlgField('annTitle', '标题', a?.title || '')}
@@ -59,14 +60,18 @@ function announcementDialog(a = null) {
       };
       if (!payload.title) throw new Error('请输入公告标题');
       const expiry = Number(dlgVal('annExpires'));
+      const expiryChanged = dlgVal('annExpires') !== String(expirySeconds);
       const permanent = document.getElementById('annPermanent').checked;
       if (permanent) {
         if (editing) payload.clear_expires = true;
+      } else if (editing && !expiryChanged) {
+        // Omitting expiry preserves the exact server timestamp. Re-sending the
+        // remaining duration would extend it by however long editing took.
       } else if (dlgVal('annExpires')) {
         if (!Number.isInteger(expiry) || expiry <= 0) throw new Error('有效期必须是正整数秒数');
         payload.expires_in_secs = expiry;
       } else if (editing && a.expires_at) {
-        payload.expires_at = a.expires_at;
+        throw new Error('请输入有效期，或选择永久有效');
       }
       await api(editing ? 'PUT' : 'POST', editing ? `/admin/api/announcements/${a.id}` : `/admin/api/games/${state.gameId}/announcements`, payload);
       toast(editing ? '已保存' : '已发布');
@@ -77,7 +82,29 @@ function announcementDialog(a = null) {
 }
 
 function markdownPreview(value) {
-  return esc(value || '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`(.+?)`/g, '<code>$1</code>').replace(/\n/g, '<br>');
+  const inline = line => esc(line)
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[([^\]]+)]\((https?:\/\/[^\s<>\)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  const out = [];
+  let inList = false;
+  for (const raw of String(value || '').split('\n')) {
+    const item = raw.match(/^\s*[-*]\s+(.+)/);
+    if (item) {
+      if (!inList) { out.push('<ul>'); inList = true; }
+      out.push(`<li>${inline(item[1])}</li>`);
+      continue;
+    }
+    if (inList) { out.push('</ul>'); inList = false; }
+    const heading = raw.match(/^(#{1,3})\s+(.+)/);
+    if (heading) out.push(`<h${heading[1].length}>${inline(heading[2])}</h${heading[1].length}>`);
+    else if (/^\s*>\s?/.test(raw)) out.push(`<blockquote>${inline(raw.replace(/^\s*>\s?/, ''))}</blockquote>`);
+    else if (raw.trim()) out.push(`<p>${inline(raw)}</p>`);
+    else out.push('<br>');
+  }
+  if (inList) out.push('</ul>');
+  return out.join('');
 }
 
 function updateAnnouncementPreview() {
@@ -89,7 +116,7 @@ function updateAnnouncementPreview() {
 function previewAnnouncement(a) {
   openDialog({
     title: `公告预览 · ${a.title}`,
-    body: `<div class="announcement-preview"><h3>${esc(a.title)}</h3><p>${markdownPreview(a.body)}</p></div>`,
+    body: `<div class="announcement-preview"><h3>${esc(a.title)}</h3>${markdownPreview(a.body)}</div>`,
     confirmText: '关闭',
     onConfirm: async () => {},
   });
