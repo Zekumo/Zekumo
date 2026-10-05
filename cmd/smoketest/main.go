@@ -10,18 +10,19 @@ import (
 
 // state carries what one phase establishes and later phases need.
 type state struct {
-	adminToken string
-	gameID     string
-	appID      string
-	appSecret  string // signs game-level KV writes; never leaves the server side
-	alice      loginRes
-	bob        loginRes
-	suffix     string
-	accountTok string // platform account (通行证) token
-	accountUsr string
-	fnBase     string // admin cloud-function path for this game
-	currencyID string // the currency phaseCurrency defines; mail rewards pay in it
-	mailID     string // the targeted mail phaseMailbox sends to alice
+	adminToken  string
+	workspaceID string
+	gameID      string
+	appID       string
+	appSecret   string // signs game-level KV writes; never leaves the server side
+	alice       loginRes
+	bob         loginRes
+	suffix      string
+	accountTok  string // platform account (通行证) token
+	accountUsr  string
+	fnBase      string // admin cloud-function path for this game
+	currencyID  string // the currency phaseCurrency defines; mail rewards pay in it
+	mailID      string // the targeted mail phaseMailbox sends to alice
 
 	// These are platform-wide, so deleting the game does not reach them;
 	// cleanup has to remove them explicitly or every run leaves rows behind.

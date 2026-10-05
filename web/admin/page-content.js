@@ -10,7 +10,7 @@ async function renderContent(host) {
   pageShell(host, {
     title: '剧情对话',
     subtitle: '控制台编辑,客户端按 key 拉取。内容是任意 JSON,结构由游戏自定。',
-    actions: `<button class="btn filled" onclick="editScript(null)">新建脚本</button>`,
+    actions: `<button class="btn filled" data-write onclick="editScript(null)">新建脚本</button>`,
     body: scripts.length ? `
       <div class="master-detail">
         <div class="card list-card">
@@ -31,8 +31,10 @@ async function renderContent(host) {
 }
 
 async function openScript(key) {
+  const ctx = operationContext();
   window.__script = key;
-  const s = await api('GET', `/admin/api/games/${state.gameId}/dialogues/${encodeURIComponent(key)}`);
+  const s = await api('GET', `/admin/api/games/${ctx.gameId}/dialogues/${encodeURIComponent(key)}`);
+  if (!contextCurrent(ctx) || window.__script !== key) return;
   document.querySelectorAll('.list-item').forEach(el =>
     el.classList.toggle('on', el.textContent.trim().startsWith(key)));
   const host = document.getElementById('scriptDetail');
@@ -48,13 +50,15 @@ async function openScript(key) {
       <textarea id="scContent" placeholder=" " style="min-height:320px">${esc(JSON.stringify(s.content, null, 2))}</textarea>
       <span class="label">内容 JSON</span></label>
     <div class="row" style="margin-top:16px">
-      <button class="btn filled" onclick="saveScript('${esc(s.script_key)}')">保存</button>
-      <button class="btn text danger" onclick="deleteScript('${esc(s.script_key)}')">删除</button>
+      <button class="btn filled" data-write onclick="saveScript('${esc(s.script_key)}')">保存</button>
+      <button class="btn text danger" data-write onclick="deleteScript('${esc(s.script_key)}')">删除</button>
       <span class="dim">更新于 ${fmtTime(s.updated_at)}</span>
     </div>`;
+  applySurfaceAccess(host);
 }
 
 function editScript() {
+  const ctx = operationContext();
   openDialog({
     title: '新建剧情脚本',
     body: dlgField('nsKey', '脚本 key(如 chapter1.intro)') + dlgField('nsTitle', '标题'),
@@ -62,8 +66,10 @@ function editScript() {
     onConfirm: async () => {
       const key = dlgVal('nsKey');
       if (!key) throw new Error('请输入脚本 key');
-      await api('PUT', `/admin/api/games/${state.gameId}/dialogues/${encodeURIComponent(key)}`,
+      requireCurrentContext(ctx);
+      await api('PUT', `/admin/api/games/${ctx.gameId}/dialogues/${encodeURIComponent(key)}`,
         { title: dlgVal('nsTitle'), content: [] });
+      requireCurrentContext(ctx);
       window.__script = key;
       toast('已创建');
       await route();

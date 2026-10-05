@@ -6,7 +6,7 @@ async function renderWebhooks(host) {
   pageShell(host, {
     title: 'WebHook',
     subtitle: `平台事件实时推送到你的地址,失败重试 3 次。请求头带 HMAC-SHA256 签名,收到后务必验签。`,
-    actions: `<button class="btn filled" onclick="newHookDialog(${JSON.stringify(data.known_events).replace(/"/g, '&quot;')})">添加 WebHook</button>`,
+    actions: `<button class="btn filled" data-write onclick="newHookDialog(${JSON.stringify(data.known_events).replace(/"/g, '&quot;')})">添加 WebHook</button>`,
     body: data.webhooks.length ? `
       ${data.webhooks.map(h => `
         <div class="card">
@@ -17,9 +17,9 @@ async function renderWebhooks(host) {
           <div class="kv"><span>订阅事件</span><b>${h.events === '*' ? '全部' : esc(h.events)}</b></div>
           <div class="kv"><span>签名密钥</span>${secretCell(h.secret, 'Secret')}</div>
           <div class="row" style="margin-top:16px">
-            <button class="btn outlined" onclick="testHook('${h.id}')">发送测试事件</button>
+            <button class="btn outlined" data-write onclick="testHook('${h.id}')">发送测试事件</button>
             <button class="btn text" onclick="showDeliveries('${h.id}','${esc(h.url)}')">投递记录</button>
-            <button class="btn text danger" onclick="deleteHook('${h.id}')">删除</button>
+            <button class="btn text danger" data-write onclick="deleteHook('${h.id}')">删除</button>
           </div>
         </div>`).join('')}
       <p class="dim">可订阅事件:${data.known_events.map(e => `<code>${esc(e)}</code>`).join(' ')}</p>`
@@ -54,7 +54,9 @@ async function testHook(id) {
 }
 
 async function showDeliveries(id, url) {
+  const ctx = operationContext();
   const { deliveries } = await api('GET', `/admin/api/webhooks/${id}/deliveries`);
+  if (!contextCurrent(ctx)) return;
   openDialog({
     title: '投递记录',
     body: `<p class="dim" style="margin-bottom:12px">${esc(url)}</p>` + (deliveries.length

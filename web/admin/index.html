@@ -26,7 +26,7 @@
       <input id="loginPass" type="password" placeholder=" " autocomplete="current-password">
       <span class="label">密码</span>
     </label>
-    <button class="btn filled block" onclick="login()">登录</button>
+    <button class="btn filled block" id="loginSubmit" onclick="login()">登录</button>
   </div>
 </div>
 
@@ -37,6 +37,7 @@
       <svg viewBox="0 0 24 24"><path d="M3 6h18v2H3V6Zm0 5h18v2H3v-2Zm0 5h18v2H3v-2Z"/></svg>
     </button>
     <span class="brand"><b>Zekumo</b></span>
+    <div id="workspaceSwitcher" class="workspace-switcher"></div>
     <div id="gameSwitcher" class="switcher"></div>
     <span class="grow"></span>
     <button id="themeBtn" class="icon-btn" title="切换主题" aria-label="切换主题">
@@ -82,6 +83,7 @@
 <script src="page-exports.js"></script>
 <script src="page-logs.js"></script>
 <script src="page-settings.js"></script>
+<script src="page-workspace.js"></script>
 <script src="boot.js"></script>
 </body>
 </html>

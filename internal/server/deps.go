@@ -31,6 +31,7 @@ import (
 	"zekumo/internal/stats"
 	"zekumo/internal/storage"
 	"zekumo/internal/store"
+	"zekumo/internal/tenant"
 	"zekumo/internal/updates"
 )
 
@@ -66,11 +67,14 @@ type deps struct {
 	bansH          *bans.Handler
 	kvH            *kv.Handler
 	exportsH       *exports.Handler
+	tenantH        *tenant.Handler
+	tenants        tenant.Store
 }
 
 // newDeps constructs the services and starts the background workers. Every
 // worker is bound to ctx, so they stop when the server does.
 func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob storage.Storage) *deps {
+	tenants := tenant.Store{DB: st.DB}
 	games := repo.Games{DB: st.DB}
 	players := repo.Players{DB: st.DB}
 	data := repo.PlayerData{DB: st.DB}
@@ -137,6 +141,7 @@ func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob stora
 		limiter: limiter,
 		logs:    logSvc,
 		hub:     hub,
+		tenants: tenants,
 		authH: &auth.Handler{
 			Issuer:   issuer,
 			Registry: auth.NewRegistry(auth.GuestProvider{Players: players}, passwordProvider, ssoProvider),
@@ -165,6 +170,7 @@ func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob stora
 			Issuer: issuer, User: cfg.AdminUser, Pass: cfg.AdminPass,
 			Games: games, Players: players, Accounts: accounts, Data: data,
 			Dialogues: repo.Dialogues{DB: st.DB}, OAuthClients: repo.OAuthClients{DB: st.DB}, Hub: hub,
+			Tenants:          tenants,
 			DefaultJWTSecret: cfg.JWTSecret == config.DefaultJWTSecret,
 		},
 		hooksH:  &hooks.Handler{Bus: bus},
@@ -197,5 +203,6 @@ func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob stora
 		bansH:    &bans.Handler{Svc: bansSvc, Events: bus},
 		kvH:      kvH,
 		exportsH: &exports.Handler{Svc: exportsSvc},
+		tenantH:  &tenant.Handler{Store: tenants, Accounts: accounts},
 	}
 }

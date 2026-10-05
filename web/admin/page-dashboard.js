@@ -16,7 +16,7 @@ async function renderDashboard(host) {
   const [stats, errors, health] = await Promise.all([
     api('GET', `/admin/api/stats?days=${chartView.days}`),
     api('GET', '/admin/api/logs?level=error&limit=6'),
-    api('GET', '/admin/api/health'),
+    hasRole('owner') ? api('GET', '/admin/api/health') : Promise.resolve(null),
   ]);
 
   const days = stats.days;
@@ -26,7 +26,7 @@ async function renderDashboard(host) {
 
   pageShell(host, {
     title: '仪表盘',
-    subtitle: `全平台 ${stats.totals.games} 个游戏 · 时区 ${esc(stats.timezone)}`,
+    subtitle: `${esc(state.workspace?.name || '当前工作区')} · ${stats.totals.games} 个游戏 · 时区 ${esc(stats.timezone)}`,
     actions: `<button class="btn text" onclick="route()">刷新</button>`,
     body: `
       ${securityBanner()}
@@ -93,7 +93,7 @@ async function renderDashboard(host) {
         </div>
       </div>
 
-      ${healthCard(health, stats, r)}`,
+      ${health ? healthCard(health, stats, r) : ''}`,
   });
 }
 

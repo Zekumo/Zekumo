@@ -197,12 +197,13 @@ func (s *Service) StartRetention(ctx context.Context) {
 }
 
 type QueryFilter struct {
-	GameID   string
-	Level    string
-	Source   string
-	Search   string
-	BeforeID int64
-	Limit    int
+	WorkspaceID string
+	GameID      string
+	Level       string
+	Source      string
+	Search      string
+	BeforeID    int64
+	Limit       int
 }
 
 // escapeLike neutralizes wildcards so a search for "%" means a literal
@@ -222,8 +223,9 @@ func (s *Service) Query(ctx context.Context, f QueryFilter) ([]Entry, error) {
 		   AND ($3 = '' OR source = $3)
 		   AND ($4 = '' OR message ILIKE '%'||$4||'%' ESCAPE '\' OR event ILIKE '%'||$4||'%' ESCAPE '\')
 		   AND ($5 = 0 OR id < $5)
+		   AND ($7 = '' OR game_id IN (SELECT id FROM games WHERE workspace_id=NULLIF($7,'')::uuid))
 		 ORDER BY id DESC LIMIT $6`,
-		f.GameID, f.Level, f.Source, escapeLike(f.Search), f.BeforeID, f.Limit)
+		f.GameID, f.Level, f.Source, escapeLike(f.Search), f.BeforeID, f.Limit, f.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}

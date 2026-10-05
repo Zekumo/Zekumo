@@ -128,7 +128,9 @@ go build -ldflags "-X zekumo/internal/server.Version=$(git describe --tags --alw
 
 ## 概念
 
-- **游戏(Game)**:租户单位。控制台创建后获得 `app_id`(可放进客户端)和
+- **组织 / 工作区**:控制台租户边界。一个组织可含工作区,成员角色为
+  `owner` / `admin` / `editor` / `viewer`;服务端每次请求都会重新校验成员关系。
+- **游戏(Game)**:属于一个工作区。控制台创建后获得 `app_id`(可放进客户端)和
   `app_secret`(保密,留给将来服务器对服务器接口用)。所有数据按游戏隔离。
   好友数上限可在控制台「设置」中调整(默认 200)，也可调用
   `PUT /admin/api/games/{id}/friend-limit` 设置为 1–10000。
@@ -500,8 +502,17 @@ setInterval(() => send("room.state", { x: me.x, y: me.y }), 100);
 
 ## 管理 API(`/admin/api`,控制台也走这套)
 
+登录响应包含 `default_workspace_id` 和当前用户可访问的 `workspaces`。除
+`/login`、`/me`、`/workspaces` 外,所有管理请求必须带
+`X-Zekumo-Workspace-ID: <workspace UUID>`;服务端按工作区、成员角色和目标资源
+同时校验,不能靠前端隐藏按钮替代鉴权。成员添加绑定已有 Zekumo 通行证账号,
+不会生成或共享租户密码。`viewer` 的游戏、OAuth 与 WebHook 列表不会返回密钥。
+
 ```
-POST   /admin/api/login                          {"username","password"} → {"token"}
+POST   /admin/api/login                          {"username","password"} → {"token","default_workspace_id","workspaces"}
+GET/POST /admin/api/workspaces                   列出 / 创建工作区
+GET/POST /admin/api/workspaces/{workspace_id}/members
+PUT/DELETE /admin/api/workspaces/{workspace_id}/members/{user_id}
 GET    /admin/api/games                          游戏列表(含在线人数)
 POST   /admin/api/games                          {"name"} → 含 app_id/app_secret
 DELETE /admin/api/games/{id}                     删游戏(级联删除所有数据)
@@ -596,6 +607,17 @@ SHA-256 后直传存储)→ 发布 / 灰度 / 下架。
 每个文件在独立事务里执行并记入 `schema_migrations` 表,已应用的不会重跑。
 加新表/改字段就新建一个 `00NN_描述.sql`,不要改动已发布的迁移文件
 (别人的库已经跑过了,改它不会重新生效)。
+
+`0020_multitenancy.sql` 是明确的租户切换点:它只新增表/列,把已有游戏和 OAuth
+应用完整迁入固定的 `Legacy workspace` (`00000000-0000-4000-8000-000000000002`),
+不会重写账号、玩家、`app_id` 或密钥。首次用配置里的 `ADMIN_USERNAME` 登录会把
+该操作员登记为 legacy owner;旧管理 JWT 因 subject 格式不同会收到
+`401 legacy_admin_token`,重新登录并在脚本里加入响应中的工作区请求头即可。
+
+为了混合版本滚动升级,`games.workspace_id` 和 `oauth_clients.workspace_id` 暂时保留
+legacy 默认值;旧二进制只能把新资源写入 legacy。所有写入者升级并确认显式传入
+工作区后,再用后续迁移移除默认值。迁移框架没有 down migration,而且工作区归属
+已经成为授权数据;回退应从升级前备份恢复,或以前向修复迁移处理,不要直接 DROP 列。
 
 ## 代码结构
 

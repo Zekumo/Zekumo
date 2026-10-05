@@ -24,8 +24,8 @@ async function renderPlayers(host) {
           <td class="dim">${fmtAgo(p.created_at)}</td>
           <td class="dim">${fmtAgo(p.last_login_at)}</td>
           <td onclick="event.stopPropagation()">${p.banned
-            ? `<button class="btn text" onclick="unbanPlayer(${inlineJSON(p.id)},${inlineJSON(p.nickname)})">解禁</button>`
-            : `<button class="btn text danger" onclick="banDialog(${inlineJSON(p.id)},${inlineJSON(p.nickname)})">封禁</button>`}</td>
+            ? `<button class="btn text" data-write onclick="unbanPlayer(${inlineJSON(p.id)},${inlineJSON(p.nickname)})">解禁</button>`
+            : `<button class="btn text danger" data-write onclick="banDialog(${inlineJSON(p.id)},${inlineJSON(p.nickname)})">封禁</button>`}</td>
         </tr>`).join('')}</tbody></table></div>`
       : emptyState('🙋', search ? '没有匹配的玩家' : '还没有玩家',
                    search ? '换个关键词试试。'
@@ -36,7 +36,9 @@ async function renderPlayers(host) {
 // showPlayer renders each save slot as its own labelled block; one big JSON
 // dump of every slot is not something you can actually read.
 async function showPlayer(id, nickname) {
+  const ctx = operationContext();
   const { entries } = await api('GET', `/admin/api/players/${id}/data`);
+  if (!contextCurrent(ctx)) return;
   openDialog({
     title: `${nickname} 的存档`,
     body: `<div class="kv"><span>玩家 ID</span>${idCell(id, '玩家 ID')}</div>` +

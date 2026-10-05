@@ -1,0 +1,112 @@
+name: multitenancy
+
+on:
+  pull_request:
+  push:
+    branches:
+      - ci/multitenancy-console
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: zekumo
+          POSTGRES_PASSWORD: zekumo
+          POSTGRES_DB: zekumo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U zekumo -d zekumo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgres://zekumo:zekumo@localhost:5432/zekumo?sslmode=disable
+      TEST_DATABASE_URL: postgres://zekumo:zekumo@localhost:5432/zekumo?sslmode=disable
+      REDIS_ADDR: localhost:6379
+      JWT_SECRET: ci-only-secret-with-at-least-thirty-two-characters
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      ZEKUMO_ADDR: :8080
+      BASE_URL: http://localhost:8080
+      FUNC_HTTP_ALLOW_PRIVATE: "true"
+      BANNED_WORDS_FILE: configs/banned_words.txt
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.1
+          npx playwright install --with-deps chromium
+
+      - name: Go tests with Postgres and Redis
+        run: go test ./...
+
+      - name: Go SDK tests
+        working-directory: sdk-go
+        run: go test ./...
+
+      - name: Console tests and syntax
+        run: |
+          node --test web/admin/tenant-console.test.mjs
+          for file in web/admin/*.js; do node --check "$file"; done
+
+      - name: Start Zekumo
+        run: |
+          go run ./cmd/server > /tmp/zekumo-server.log 2>&1 &
+          echo $! > /tmp/zekumo-server.pid
+          for i in $(seq 1 60); do
+            curl --fail --silent http://localhost:8080/readyz && exit 0
+            sleep 1
+          done
+          cat /tmp/zekumo-server.log
+          exit 1
+
+      - name: Full Postgres Redis and storage smoke test
+        env:
+          ZEKUMO_URL: http://localhost:8080
+          ZEKUMO_WS: ws://localhost:8080
+        run: go run ./cmd/smoketest
+
+      - name: Live console workspace and role browser test
+        env:
+          ZEKUMO_URL: http://127.0.0.1:8080
+          CONSOLE_SCREENSHOT_DIR: artifacts/console-e2e
+        run: node web/admin/tenant-console.e2e.mjs
+
+      - name: Upload console browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zekumo-console-browser-${{ github.run_id }}
+          path: artifacts/console-e2e
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Show server log on failure
+        if: failure()
+        run: cat /tmp/zekumo-server.log || true

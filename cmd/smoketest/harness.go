@@ -6,15 +6,17 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 var (
-	base   = env("ZEKUMO_URL", "http://localhost:8080")
-	wsBase = env("ZEKUMO_WS", "ws://localhost:8080")
-	failed = 0
+	base            = env("ZEKUMO_URL", "http://localhost:8080")
+	wsBase          = env("ZEKUMO_WS", "ws://localhost:8080")
+	failed          = 0
+	activeWorkspace = ""
 )
 
 func env(k, def string) string {
@@ -42,6 +44,9 @@ func call(method, path, token string, body any, out any) error {
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if activeWorkspace != "" && strings.HasPrefix(path, "/admin/api/") {
+		req.Header.Set("X-Zekumo-Workspace-ID", activeWorkspace)
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {

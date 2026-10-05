@@ -1,6 +1,7 @@
 // Navigation: a hash route decides which page renders, so the browser back
-// button and bookmarks work. Routes are either platform-level (#/games) or
-// scoped to a game (#/g/<id>/overview).
+// button and bookmarks work. Workspace identity is part of the URL so Back,
+// Forward, and bookmarks cannot silently pair one workspace with another's
+// game ID.
 
 // Render functions are called lazily: the page-*.js files load after this
 // one, so naming them directly here would capture undefined. `scopes` lists
@@ -10,6 +11,7 @@ const ROUTES = {
   games:     { title: '游戏',       scopes: ['platform'], render: h => renderGames(h) },
   accounts:  { title: '通行证账号', scopes: ['platform'], render: h => renderAccounts(h) },
   oauth:     { title: 'OAuth 应用', scopes: ['platform'], render: h => renderOAuth(h) },
+  members:   { title: '成员与权限', scopes: ['platform'], render: h => renderWorkspace(h) },
 
   overview:  { title: '概览',       scopes: ['game'], render: h => renderOverview(h) },
   players:   { title: '玩家',       scopes: ['game'], render: h => renderPlayers(h) },
@@ -34,6 +36,7 @@ const NAV_PLATFORM = [
   ['games', 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm2 5v2H5v2h2v2h2v-2h2v-2H9V9H7Zm9 1a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z'],
   ['accounts', 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4 0-9 2-9 5v3h18v-3c0-3-5-5-9-5Z'],
   ['oauth', 'M12 1 3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5l-9-4Zm0 10.9h7c-.5 4.1-3.3 7.8-7 8.9V12H5V6.3l7-3.1v8.7Z'],
+  ['members', 'M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3ZM8 11c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3Zm0 2c-2.3 0-7 1.2-7 3.5V19h10v-2.5c0-.8.3-1.5.8-2.1C10.5 13.5 9 13 8 13Zm8 0c-1 0-2.5.5-3.8 1.4.5.6.8 1.3.8 2.1V19h10v-2.5c0-2.3-4.7-3.5-7-3.5Z'],
   ['logs', 'M4 3h16v2H4V3Zm0 4h16v2H4V7Zm0 4h10v2H4v-2Zm0 4h16v2H4v-2Zm0 4h10v2H4v-2Z'],
 ];
 
@@ -58,26 +61,42 @@ const NAV_GAME = [
 function icon(path) { return `<svg viewBox="0 0 24 24"><path d="${path}"/></svg>`; }
 
 function currentRoute() {
-  const hash = location.hash.replace(/^#\/?/, '');
-  const parts = hash.split('/').filter(Boolean);
-  if (parts[0] === 'g' && parts[1]) {
-    return { gameId: parts[1], page: parts[2] || 'overview' };
+  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  if (parts[0] === 'w' && parts[1]) {
+    if (parts[2] === 'g' && parts[3]) {
+      return { workspaceId: parts[1], gameId: parts[3], page: parts[4] || 'overview' };
+    }
+    return { workspaceId: parts[1], gameId: null, page: parts[2] || 'dashboard' };
   }
-  return { gameId: null, page: parts[0] || 'dashboard' };
+  // Old bookmarks remain usable; route() upgrades them with replaceState.
+  if (parts[0] === 'g' && parts[1]) {
+    return { workspaceId: null, gameId: parts[1], page: parts[2] || 'overview' };
+  }
+  return { workspaceId: null, gameId: null, page: parts[0] || 'dashboard' };
 }
 
-function go(page, gameId) {
+function routeHash(page, gameId = null, workspaceId = state.workspaceId) {
+  if (!workspaceId) return '#/welcome';
+  const scoped = gameId && ROUTES[page]?.scopes.includes('game');
+  return scoped ? `#/w/${workspaceId}/g/${gameId}/${page}` : `#/w/${workspaceId}/${page}`;
+}
+
+function replaceRoute(page, gameId = null, workspaceId = state.workspaceId) {
+  history.replaceState(null, '', routeHash(page, gameId, workspaceId));
+  route();
+}
+
+function go(page, gameId, workspaceId) {
   const id = gameId !== undefined ? gameId : state.gameId;
-  const scoped = id && ROUTES[page]?.scopes.includes('game');
-  location.hash = scoped ? `#/g/${id}/${page}` : `#/${page}`;
+  location.hash = routeHash(page, id, workspaceId || state.workspaceId);
 }
 
 function renderNav(active, scope) {
   const items = scope === 'game' ? NAV_GAME : NAV_PLATFORM;
   const rail = document.getElementById('navRail');
   const header = scope === 'game'
-    ? `<button class="nav-back" onclick="go('dashboard', null)">${icon('M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20v-2Z')} 返回平台</button>`
-    : `<div class="nav-section">平台</div>`;
+    ? `<button class="nav-back" onclick="go('dashboard', null)">${icon('M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20v-2Z')} 返回工作区</button>`
+    : `<div class="nav-section">${esc(state.workspace?.name || '工作区')}</div>`;
   rail.innerHTML = header + items.map(([key, path]) => `
     <button class="nav-item ${key === active ? 'on' : ''}" onclick="go('${key}')">
       ${icon(path)}<span>${ROUTES[key].title}</span>
@@ -90,27 +109,108 @@ function renderSwitcher() {
   const el = document.getElementById('gameSwitcher');
   if (!state.game) { el.innerHTML = ''; return; }
   el.innerHTML = `<span class="switcher-sep">/</span>
-    <select onchange="go(currentRoute().page, this.value)">
+    <select aria-label="切换游戏" onchange="go(currentRoute().page, this.value)">
       ${state.games.map(g =>
-        `<option value="${g.id}" ${g.id === state.gameId ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
+        `<option value="${esc(g.id)}" ${g.id === state.gameId ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
     </select>`;
 }
 
+function renderWorkspaceSwitcher() {
+  const el = document.getElementById('workspaceSwitcher');
+  if (!state.workspaceId || !state.workspaces.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<span class="switcher-sep">/</span>
+    <label class="workspace-select-wrap">
+      <span class="sr-only">切换工作区</span>
+      <select aria-label="切换工作区" onchange="selectWorkspace(this.value)">
+        ${state.workspaces.map(w => `<option value="${esc(w.id)}" ${w.id === state.workspaceId ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+      </select>
+    </label>
+    <span class="workspace-role">${esc(roleLabel(state.activeRole))}</span>`;
+}
+
+function selectWorkspace(workspaceId) {
+  if (!workspaceId || workspaceId === state.workspaceId) return;
+  location.hash = routeHash('dashboard', null, workspaceId);
+}
+
+async function activateWorkspace(workspaceId) {
+  const workspace = state.workspaces.find(w => w.id === workspaceId);
+  if (!workspace) throw new Error('你已无法访问这个工作区');
+  const session = state.sessionEpoch;
+  const epoch = ++state.workspaceEpoch;
+
+  resetScopedUIState();
+  state.games = [];
+  state.gameId = null;
+  state.game = null;
+  state.workspaceId = workspaceId;
+  state.workspace = workspace;
+  state.activeRole = workspace.role || null;
+  localStorage.setItem(WORKSPACE_KEY, workspaceId);
+  renderWorkspaceSwitcher();
+  renderAccount();
+
+  const [gamesData, meData] = await Promise.all([
+    api('GET', '/admin/api/games', undefined, { workspaceId }),
+    api('GET', '/admin/api/me', undefined, { workspaceId }),
+  ]);
+  if (session !== state.sessionEpoch || epoch !== state.workspaceEpoch || workspaceId !== state.workspaceId) {
+    return false;
+  }
+  state.games = gamesData.games || [];
+  state.me = normalizeMe(meData);
+  state.workspaces = meData.workspaces || state.workspaces;
+  state.workspace = state.workspaces.find(w => w.id === workspaceId) || null;
+  if (!state.workspace) throw new Error('你已无法访问这个工作区');
+  state.activeRole = meData.active_role || state.workspace.role || null;
+  renderWorkspaceSwitcher();
+  renderAccount();
+  return true;
+}
+
+let routeSeq = 0;
 async function route() {
-  const { gameId, page } = currentRoute();
+  const seq = ++routeSeq;
+  const requested = currentRoute();
+  if (!state.workspaces.length) {
+    renderWorkspaceWelcome();
+    return;
+  }
+
+  const desiredWorkspace = requested.workspaceId || state.workspaceId || state.workspaces[0].id;
+  if (!state.workspaces.some(w => w.id === desiredWorkspace)) {
+    replaceRoute('dashboard', null, state.workspaceId || state.workspaces[0].id);
+    return;
+  }
+  if (desiredWorkspace !== state.workspaceId || !state.workspace) {
+    const host = document.getElementById('page');
+    host.innerHTML = `<div class="workspace-loading">${skeleton(4)}</div>`;
+    try {
+      if (!await activateWorkspace(desiredWorkspace) || seq !== routeSeq) return;
+    } catch (e) {
+      if (seq !== routeSeq) return;
+      host.innerHTML = errorState('工作区加载失败', e.message, true);
+      return;
+    }
+  }
+
+  if (!requested.workspaceId) {
+    replaceRoute(requested.page, requested.gameId, desiredWorkspace);
+    return;
+  }
+
+  const { gameId, page } = requested;
   const scope = gameId ? 'game' : 'platform';
-  let def = ROUTES[page];
+  const def = ROUTES[page];
   if (!def || !def.scopes.includes(scope)) {
-    // A game-only page without a game (or the reverse): fall back to the
-    // default landing page for whichever scope we are actually in.
-    location.hash = gameId ? `#/g/${gameId}/overview` : '#/dashboard';
+    replaceRoute(gameId ? 'overview' : 'dashboard', gameId, desiredWorkspace);
     return;
   }
 
   state.gameId = gameId;
   state.game = gameId ? state.games.find(g => g.id === gameId) : null;
-  if (gameId && !state.game) { // stale link, or the game was deleted
-    location.hash = '#/dashboard';
+  if (gameId && !state.game) {
+    replaceRoute('dashboard', null, desiredWorkspace);
     return;
   }
 
@@ -118,13 +218,20 @@ async function route() {
   renderSwitcher();
   document.getElementById('navRail').classList.remove('open');
 
-  const host = document.getElementById('page');
+  // Every route gets its own detached surface. A slow older renderer may still
+  // finish, but it can only paint the surface removed by the newer route.
+  const pageHost = document.getElementById('page');
+  const host = document.createElement('div');
+  host.className = 'route-surface';
   host.innerHTML = `<h1 class="page-title">${esc(def.title)}</h1>${skeleton()}`;
+  pageHost.replaceChildren(host);
   try {
     await def.render(host);
+    if (seq !== routeSeq || !host.isConnected) return;
+    applySurfaceAccess(host);
   } catch (e) {
-    host.innerHTML = `<h1 class="page-title">${esc(def.title)}</h1>` +
-      emptyState('⚠️', '加载失败', esc(e.message));
+    if (seq !== routeSeq || !host.isConnected) return;
+    host.innerHTML = `<h1 class="page-title">${esc(def.title)}</h1>` + errorState('加载失败', e.message);
   }
 }
 
@@ -139,19 +246,46 @@ function pageShell(host, { title, subtitle, actions = '', body }) {
       </div>
       <div class="row">${actions}</div>
     </div>
-    ${body}`;
+    ${readOnlyBanner()}${body}`;
 }
 
-async function refreshGames() {
-  state.games = (await api('GET', '/admin/api/games')).games;
+async function refreshGames(workspaceId = state.workspaceId) {
+  const session = state.sessionEpoch;
+  const epoch = state.workspaceEpoch;
+  const games = (await api('GET', '/admin/api/games', undefined, { workspaceId })).games || [];
+  if (session === state.sessionEpoch && epoch === state.workspaceEpoch && workspaceId === state.workspaceId) {
+    state.games = games;
+  }
+  return games;
 }
 
-async function enterApp() {
+async function enterApp(loginData = null) {
   document.getElementById('loginView').classList.add('hidden');
   document.getElementById('appView').classList.remove('hidden');
-  await Promise.all([refreshGames(), loadMe()]);
-  if (!location.hash) location.hash = '#/dashboard';
-  else await route();
+  const session = state.sessionEpoch;
+  let initial = loginData;
+  if (!initial?.workspaces) initial = await api('GET', '/admin/api/me', undefined, { workspaceId: null });
+  if (session !== state.sessionEpoch) return;
+
+  state.me = normalizeMe(initial);
+  state.workspaces = initial.workspaces || [];
+  renderAccount();
+  if (!state.workspaces.length) {
+    state.workspaceId = null;
+    state.workspace = null;
+    state.activeRole = null;
+    renderWorkspaceWelcome();
+    return;
+  }
+
+  const requested = currentRoute().workspaceId;
+  const stored = localStorage.getItem(WORKSPACE_KEY);
+  const preferred = [requested, stored, initial.default_workspace_id, initial.active_workspace_id]
+    .find(id => state.workspaces.some(w => w.id === id)) || state.workspaces[0].id;
+  if (!location.hash || requested !== preferred) {
+    history.replaceState(null, '', routeHash('dashboard', null, preferred));
+  }
+  await route();
 }
 
 window.addEventListener('hashchange', route);

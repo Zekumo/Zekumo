@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"zekumo/internal/httpx"
+	"zekumo/internal/tenant"
 )
 
 // Health is the platform's own condition, as opposed to game activity: are
@@ -48,6 +49,7 @@ type HealthHandler struct {
 // Health handles GET /admin/api/health.
 func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	workspaceID := tenant.FromContext(ctx).WorkspaceID
 	out := Health{
 		Version:       h.Version,
 		Env:           h.Env,
@@ -72,17 +74,23 @@ func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 
 	// Counters are best-effort: a dashboard should still render if one of
 	// these queries fails rather than returning nothing at all.
-	scan(ctx, h.Svc, `SELECT COALESCE(sum(size), 0) FROM artifacts WHERE status = 'ready'`, &out.ArtifactBytes)
-	scan(ctx, h.Svc, `SELECT count(*) FROM app_logs`, &out.LogRows)
-	scan(ctx, h.Svc, `SELECT count(*) FROM chat_messages`, &out.ChatRows)
-	scan(ctx, h.Svc, `SELECT count(*) FROM webhook_deliveries`, &out.WebhookTotal)
-	scan(ctx, h.Svc, `SELECT count(*) FROM webhook_deliveries WHERE ok`, &out.WebhookOK)
-	scan(ctx, h.Svc, `SELECT count(*) FROM app_logs
-	                  WHERE source = 'funcs' AND level = 'error' AND created_at > now() - interval '24 hours'`,
-		&out.FunctionErrors24h)
-	scan(ctx, h.Svc, `SELECT count(*) FROM app_logs
-	                  WHERE source = 'http' AND level = 'error' AND created_at > now() - interval '24 hours'`,
-		&out.HTTPErrors24h)
+	scanWorkspace(ctx, h.Svc,
+		`SELECT COALESCE(sum(a.size),0) FROM artifacts a JOIN releases r ON r.id=a.release_id JOIN games g ON g.id=r.game_id
+		 WHERE a.status='ready' AND g.workspace_id=$1`, workspaceID, &out.ArtifactBytes)
+	scanWorkspace(ctx, h.Svc, `SELECT count(*) FROM app_logs l JOIN games g ON g.id=l.game_id WHERE g.workspace_id=$1`, workspaceID, &out.LogRows)
+	scanWorkspace(ctx, h.Svc, `SELECT count(*) FROM chat_messages c JOIN games g ON g.id=c.game_id WHERE g.workspace_id=$1`, workspaceID, &out.ChatRows)
+	scanWorkspace(ctx, h.Svc,
+		`SELECT count(*) FROM webhook_deliveries d JOIN webhooks w ON w.id=d.webhook_id JOIN games g ON g.id=w.game_id WHERE g.workspace_id=$1`,
+		workspaceID, &out.WebhookTotal)
+	scanWorkspace(ctx, h.Svc,
+		`SELECT count(*) FROM webhook_deliveries d JOIN webhooks w ON w.id=d.webhook_id JOIN games g ON g.id=w.game_id
+		 WHERE d.ok AND g.workspace_id=$1`, workspaceID, &out.WebhookOK)
+	scanWorkspace(ctx, h.Svc, `SELECT count(*) FROM app_logs l JOIN games g ON g.id=l.game_id
+	                  WHERE g.workspace_id=$1 AND l.source='funcs' AND l.level='error' AND l.created_at > now() - interval '24 hours'`,
+		workspaceID, &out.FunctionErrors24h)
+	scanWorkspace(ctx, h.Svc, `SELECT count(*) FROM app_logs l JOIN games g ON g.id=l.game_id
+	                  WHERE g.workspace_id=$1 AND l.source='http' AND l.level='error' AND l.created_at > now() - interval '24 hours'`,
+		workspaceID, &out.HTTPErrors24h)
 
 	httpx.JSON(w, http.StatusOK, out)
 }
@@ -91,6 +99,6 @@ func msSince(t time.Time) float64 {
 	return float64(time.Since(t).Microseconds()) / 1000
 }
 
-func scan(ctx context.Context, s *Service, query string, dst *int64) {
-	_ = s.DB.QueryRow(ctx, query).Scan(dst)
+func scanWorkspace(ctx context.Context, s *Service, query, workspaceID string, dst *int64) {
+	_ = s.DB.QueryRow(ctx, query, workspaceID).Scan(dst)
 }

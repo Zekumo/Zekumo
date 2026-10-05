@@ -104,8 +104,8 @@ func (r Wallets) ApplyTx(ctx context.Context, tx pgx.Tx, currencyID, playerID st
 		}
 	} else {
 		err := tx.QueryRow(ctx,
-			`UPDATE currency_balances SET balance = balance + $3, updated_at = now()
-			 WHERE currency_id=$1 AND player_id=$2 AND balance >= -$3
+			`UPDATE currency_balances SET balance = balance + $3::bigint, updated_at = now()
+			 WHERE currency_id=$1 AND player_id=$2 AND balance >= -($3::bigint)
 			 RETURNING balance`,
 			currencyID, playerID, amount).Scan(&balance)
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -19,7 +19,7 @@ async function renderCurrency(host) {
     subtitle: `服务端发放与消费，账本按幂等流水号去重。每个游戏最多 ${CURRENCY_MAX} 种货币。`,
     actions: `
       <button class="btn text" onclick="currencyPlayerDialog()">查玩家余额</button>
-      <button class="btn filled" onclick="currencyDialog()" ${full ? 'disabled' : ''}>
+      <button class="btn filled" data-write onclick="currencyDialog()" ${full ? 'disabled' : ''}>
         ${full ? '已达上限' : '新建货币'}</button>`,
     body: rows.length ? `<div class="card table-card">
         <div class="card-head">
@@ -46,9 +46,9 @@ function currencyRow(c) {
     <td>${idCell(c.id, '货币 ID')}</td>
     <td class="dim">${fmtAgo(c.created_at)}</td>
     <td><div class="row">
-      <button class="btn text" onclick="grantDialog(${inlineJSON(c)})">发放</button>
-      <button class="btn text" onclick="currencyDialog(${inlineJSON(c)})">编辑</button>
-      <button class="btn text danger" onclick="deleteCurrency(${inlineJSON(c.id)},${inlineJSON(c.display_name || c.name)})">删除</button>
+      <button class="btn text" data-write onclick="grantDialog(${inlineJSON(c)})">发放</button>
+      <button class="btn text" data-write onclick="currencyDialog(${inlineJSON(c)})">编辑</button>
+      <button class="btn text danger" data-write onclick="deleteCurrency(${inlineJSON(c.id)},${inlineJSON(c.display_name || c.name)})">删除</button>
     </div></td>
   </tr>`;
 }

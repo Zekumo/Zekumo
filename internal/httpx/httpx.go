@@ -14,6 +14,9 @@ type gameIDHolder struct{ v string }
 
 type holderKey struct{}
 
+type workspaceIDHolder struct{ v string }
+type workspaceHolderKey struct{}
+
 func ContextWithGameIDSlot(ctx context.Context) context.Context {
 	return context.WithValue(ctx, holderKey{}, &gameIDHolder{})
 }
@@ -26,6 +29,25 @@ func SetCtxGameID(ctx context.Context, gameID string) {
 
 func CtxGameID(ctx context.Context) string {
 	if h, ok := ctx.Value(holderKey{}).(*gameIDHolder); ok {
+		return h.v
+	}
+	return ""
+}
+
+// ContextWithWorkspaceIDSlot mirrors the game-id slot for tenant-aware admin
+// middleware and access logging.
+func ContextWithWorkspaceIDSlot(ctx context.Context) context.Context {
+	return context.WithValue(ctx, workspaceHolderKey{}, &workspaceIDHolder{})
+}
+
+func SetCtxWorkspaceID(ctx context.Context, workspaceID string) {
+	if h, ok := ctx.Value(workspaceHolderKey{}).(*workspaceIDHolder); ok {
+		h.v = workspaceID
+	}
+}
+
+func CtxWorkspaceID(ctx context.Context) string {
+	if h, ok := ctx.Value(workspaceHolderKey{}).(*workspaceIDHolder); ok {
 		return h.v
 	}
 	return ""

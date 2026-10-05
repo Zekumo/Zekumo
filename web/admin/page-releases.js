@@ -13,7 +13,7 @@ async function renderReleases(host) {
   pageShell(host, {
     title: '版本更新',
     subtitle: '更新器无需登录即可查询 <code>/v1/apps/{app_id}/updates/check</code>。下架某版本后会自动回退到上一个已发布版本。',
-    actions: `<button class="btn filled" onclick="newReleaseDialog()">创建版本</button>`,
+    actions: `<button class="btn filled" data-write onclick="newReleaseDialog()">创建版本</button>`,
     body: releases.length ? `<div class="card table-card"><table>
         <thead><tr><th>版本</th><th>渠道</th><th>状态</th><th>灰度</th><th>发布时间</th><th></th></tr></thead>
         <tbody>${releases.map(relRow).join('')}</tbody></table></div>`
@@ -26,11 +26,11 @@ function relRow(r) {
   const q = `'${esc(r.version)}','${esc(r.channel)}'`;
   const acts = [`<button class="btn text" onclick="manageArtifacts(${q})">产物</button>`];
   if (r.status === 'draft') {
-    acts.push(`<button class="btn text" onclick="publishRelease(${q})">发布</button>`,
-              `<button class="btn text danger" onclick="deleteRelease(${q})">删除</button>`);
+    acts.push(`<button class="btn text" data-write onclick="publishRelease(${q})">发布</button>`,
+              `<button class="btn text danger" data-write onclick="deleteRelease(${q})">删除</button>`);
   } else if (r.status === 'published') {
-    acts.push(`<button class="btn text" onclick="rolloutDialog(${q},${r.rollout_percent})">灰度</button>`,
-              `<button class="btn text danger" onclick="revokeRelease(${q})">下架</button>`);
+    acts.push(`<button class="btn text" data-write onclick="rolloutDialog(${q},${r.rollout_percent})">灰度</button>`,
+              `<button class="btn text danger" data-write onclick="revokeRelease(${q})">下架</button>`);
   }
   return `<tr>
     <td><b>${esc(r.version)}</b>${r.mandatory ? ' <span class="badge error">强制</span>' : ''}</td>
@@ -46,8 +46,8 @@ function rolloutBar(pct) {
   return `<div class="rollout"><div class="rollout-fill" style="width:${pct}%"></div><span>${pct}%</span></div>`;
 }
 
-function relPath(version, channel) {
-  return `/admin/api/games/${state.gameId}/releases/${encodeURIComponent(version)}?channel=${encodeURIComponent(channel)}`;
+function relPath(version, channel, gameId = state.gameId) {
+  return `/admin/api/games/${gameId}/releases/${encodeURIComponent(version)}?channel=${encodeURIComponent(channel)}`;
 }
 
 function newReleaseDialog() {
@@ -120,7 +120,9 @@ function rolloutDialog(version, channel, current) {
 
 // ---------- artifacts ----------
 async function manageArtifacts(version, channel) {
-  const { artifacts } = await api('GET', relPath(version, channel).replace('?', '/artifacts?'));
+  const ctx = operationContext();
+  const { artifacts } = await api('GET', relPath(version, channel, ctx.gameId).replace('?', '/artifacts?'));
+  if (!contextCurrent(ctx)) return;
   openDialog({
     title: `${version} 的产物`,
     body: `
@@ -133,7 +135,7 @@ async function manageArtifacts(version, channel) {
           <td><span class="badge ${a.status === 'ready' ? 'ok' : ''}">${a.status === 'ready' ? '就绪' : '待上传'}</span></td>
         </tr>`).join('')}</tbody></table>`
         : `<p class="dim" style="margin-bottom:16px">还没有产物。发布前至少需要一个就绪的产物。</p>`}
-      <div class="row">
+      ${canWrite() ? `<div class="row">
         <label class="field compact" style="width:140px">
           <select id="apPlatform">
             <option>windows</option><option>macos</option><option>linux</option>
@@ -144,16 +146,17 @@ async function manageArtifacts(version, channel) {
           <span class="label">架构</span></label>
         <label class="field"><input type="file" id="apFile" placeholder=" "><span class="label">选择文件</span></label>
       </div>
-      <div id="apStatus" class="dim" style="margin-top:12px"></div>`,
-    confirmText: '上传',
+      <div id="apStatus" class="dim" style="margin-top:12px"></div>` : ''}`,
+    confirmText: canWrite() ? '上传' : '关闭',
     onConfirm: async () => {
-      await uploadArtifact(version, channel);
+      if (!canWrite()) return;
+      await uploadArtifact(version, channel, ctx);
       throw new Error(''); // keep the dialog open so the list can be re-read
     },
   });
 }
 
-async function uploadArtifact(version, channel) {
+async function uploadArtifact(version, channel, ctx = operationContext()) {
   const file = document.getElementById('apFile').files[0];
   const status = document.getElementById('apStatus');
   if (!file) { status.textContent = '请先选择文件'; return; }
@@ -161,20 +164,23 @@ async function uploadArtifact(version, channel) {
   status.textContent = '计算校验和…';
   const buf = await file.arrayBuffer();
   const digest = await crypto.subtle.digest('SHA-256', buf);
+  requireCurrentContext(ctx);
   const sha256 = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
 
   status.textContent = '登记产物…';
-  const reg = await api('POST', relPath(version, channel).replace('?', '/artifacts?'), {
+  const reg = await api('POST', relPath(version, channel, ctx.gameId).replace('?', '/artifacts?'), {
     platform: document.getElementById('apPlatform').value,
     arch: document.getElementById('apArch').value,
     filename: file.name, size: file.size, sha256,
   });
+  requireCurrentContext(ctx);
 
   status.textContent = `上传中(${fmtBytes(file.size)})…`;
   const put = await fetch(reg.upload_url, { method: 'PUT', body: buf });
   if (!put.ok) { status.textContent = '上传失败:HTTP ' + put.status; return; }
+  requireCurrentContext(ctx);
 
-  await api('POST', relPath(version, channel)
+  await api('POST', relPath(version, channel, ctx.gameId)
     .replace('?', `/artifacts/${reg.artifact.id}/complete?`), {});
   status.textContent = '完成。';
   toast('产物已上传');

@@ -7,10 +7,15 @@ import (
 
 func phaseCore(s *state) {
 	// Admin: login, create a game.
-	var adminRes struct{ Token string }
+	var adminRes struct {
+		Token              string `json:"token"`
+		DefaultWorkspaceID string `json:"default_workspace_id"`
+	}
 	step("admin login", call("POST", "/admin/api/login", "",
 		map[string]string{"username": env("ADMIN_USERNAME", "admin"), "password": env("ADMIN_PASSWORD", "admin123")}, &adminRes))
 	s.adminToken = adminRes.Token
+	s.workspaceID = adminRes.DefaultWorkspaceID
+	activeWorkspace = s.workspaceID
 
 	var game struct {
 		ID        string `json:"id"`

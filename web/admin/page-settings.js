@@ -21,7 +21,7 @@ async function renderSettings(host) {
         <label class="field compact" style="max-width:240px">
           <input id="setFriendLimit" type="number" min="1" max="10000" placeholder=" " value="${esc(g.friend_limit || 200)}">
           <span class="label">好友数上限</span></label>
-        <div class="row" style="margin-top:16px"><button class="btn filled" onclick="saveFriendLimit()">保存</button></div>
+        <div class="row" style="margin-top:16px"><button class="btn filled" data-write onclick="saveFriendLimit()">保存</button></div>
       </div>
 
       <div class="card">
@@ -35,7 +35,7 @@ async function renderSettings(host) {
         <label class="field">
           <textarea id="setSso" placeholder=" " style="min-height:120px">${esc(g.sso_redirect_urls || '')}</textarea>
           <span class="label">回跳地址</span></label>
-        <div class="row" style="margin-top:16px"><button class="btn filled" onclick="saveSSO()">保存</button></div>
+        <div class="row" style="margin-top:16px"><button class="btn filled" data-write onclick="saveSSO()">保存</button></div>
       </div>
 
       <div class="card">
@@ -47,14 +47,14 @@ async function renderSettings(host) {
         <label class="field">
           <textarea id="setHttp" placeholder=" " style="min-height:100px">${esc(g.func_http_allowlist || '')}</textarea>
           <span class="label">允许的域名</span></label>
-        <div class="row" style="margin-top:16px"><button class="btn filled" onclick="saveAllowlist()">保存</button></div>
+        <div class="row" style="margin-top:16px"><button class="btn filled" data-write onclick="saveAllowlist()">保存</button></div>
       </div>
 
       <div class="card danger-zone">
         <h2>危险操作</h2>
         <div class="row between">
           <span class="dim">删除游戏会连带删除全部玩家、存档、排行榜、剧情、版本与日志。</span>
-          <button class="btn filled danger" onclick="deleteGame('${g.id}','${esc(g.name)}')">删除游戏</button>
+          <button class="btn filled danger" data-write data-min-role="owner" onclick="deleteGame('${g.id}','${esc(g.name)}')">删除游戏</button>
         </div>
       </div>`,
   });

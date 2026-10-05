@@ -6,10 +6,10 @@ async function renderGames(host) {
   const games = state.games;
   pageShell(host, {
     title: '游戏',
-    subtitle: '每个游戏是一个独立的租户,数据互不可见。',
-    actions: `<button class="btn filled" onclick="newGameDialog()">创建游戏</button>`,
+    subtitle: '当前工作区的游戏，数据与其他工作区完全分开。',
+    actions: `<button class="btn filled" data-write data-min-role="admin" onclick="newGameDialog()">创建游戏</button>`,
     body: games.length ? `<div class="grid">${games.map(gameCard).join('')}</div>`
-      : emptyState('🎮', '还没有游戏', '创建第一个游戏,拿到 App ID 后客户端就可以登录了。'),
+      : mascotState('empty', '还没有游戏', '创建第一个游戏，拿到 App ID 后客户端就可以登录了。'),
   });
 }
 
@@ -27,7 +27,7 @@ function gameCard(g) {
     </div>
     <div class="game-card-foot">
       <span class="dim">创建于 ${fmtAgo(g.created_at)}</span>
-      <button class="btn text danger" onclick="event.stopPropagation();deleteGame('${g.id}','${esc(g.name)}')">删除</button>
+      <button class="btn text danger" data-write data-min-role="owner" onclick="event.stopPropagation();deleteGame('${g.id}','${esc(g.name)}')">删除</button>
     </div>
   </div>`;
 }
@@ -68,7 +68,7 @@ async function renderOAuth(host) {
   pageShell(host, {
     title: 'OAuth 应用',
     subtitle: '第三方应用用 Zekumo 通行证登录。公开客户端(无 secret)强制使用 PKCE。',
-    actions: `<button class="btn filled" onclick="newOAuthDialog()">创建应用</button>`,
+    actions: `<button class="btn filled" data-write data-min-role="admin" onclick="newOAuthDialog()">创建应用</button>`,
     body: clients.length ? `<div class="card table-card"><table>
       <thead><tr><th>名称</th><th>Client ID</th><th>Client Secret</th><th>回跳白名单</th><th>创建</th><th></th></tr></thead>
       <tbody>${clients.map(c => `<tr>
@@ -78,7 +78,7 @@ async function renderOAuth(host) {
                               : '<span class="badge">公开客户端</span>'}</td>
         <td class="dim">${(c.redirect_urls || '').split('\n').filter(Boolean).map(esc).join('<br>') || '—'}</td>
         <td class="dim">${fmtAgo(c.created_at)}</td>
-        <td><button class="btn text danger" onclick="deleteOAuth('${c.client_id}','${esc(c.name)}')">删除</button></td>
+        <td><button class="btn text danger" data-write data-min-role="admin" onclick="deleteOAuth('${c.client_id}','${esc(c.name)}')">删除</button></td>
       </tr>`).join('')}</tbody></table></div>`
       : emptyState('🔑', '还没有 OAuth 应用', '第三方要接入通行证登录时,在这里为它注册一个应用。'),
   });
@@ -133,7 +133,7 @@ async function renderAccounts(host) {
         <td>${esc(a.nickname) || '—'}</td>
         <td class="dim">${fmtAgo(a.created_at)}</td>
         <td class="dim">${fmtAgo(a.last_login_at)}</td>
-        <td><button class="btn text danger" onclick="deleteAccount('${a.id}','${esc(a.username)}')">删除</button></td>
+        <td><button class="btn text danger" data-write data-min-role="owner" onclick="deleteAccount('${a.id}','${esc(a.username)}')">删除</button></td>
       </tr>`).join('')}</tbody></table></div>`
       : emptyState('👤', search ? '没有匹配的账号' : '还没有通行证账号',
                    search ? '换个关键词试试。' : '玩家在游戏里注册通行证后会出现在这里。'),

@@ -37,7 +37,7 @@ async function renderExports(host) {
   pageShell(host, {
     title: '数据导出',
     subtitle: '导出玩家档案、存档、货币流水与成就,满足数据可携带(GDPR)要求。下载链接有效期 24 小时。',
-    actions: `<button class="btn filled" onclick="newExportDialog()">新建导出</button>`,
+    actions: `<button class="btn filled" data-write onclick="newExportDialog()">新建导出</button>`,
     body: list.length ? `<div class="card table-card"><table>
         <thead><tr><th>范围</th><th>格式</th><th>状态</th><th>大小</th><th>提交时间</th><th>耗时</th><th></th></tr></thead>
         <tbody>${list.map(exportRow).join('')}</tbody>
@@ -90,9 +90,10 @@ function pollExports(list) {
   clearTimeout(exportTimer);                           // drop the previous render's timer, never stack them
   const busy = list.some(r => r.job.status === 'pending' || r.job.status === 'running');
   if (!busy) return;                                   // nothing in flight
+  const ctx = operationContext();
 
   exportTimer = setTimeout(() => {
-    if (currentRoute().page !== 'exports') return;      // navigated away; do not redraw their page
+    if (!contextCurrent(ctx) || currentRoute().page !== 'exports') return;
     route();                                            // re-render, which re-evaluates whether to keep polling
   }, EXPORT_POLL_MS);
 }

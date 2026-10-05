@@ -21,15 +21,22 @@ func randomHex(n int) string {
 }
 
 func (g Games) Create(ctx context.Context, name string) (*Game, error) {
+	return g.CreateForWorkspace(ctx, "00000000-0000-4000-8000-000000000002", name)
+}
+
+// CreateForWorkspace is the console write path. Create remains as a legacy
+// compatibility shim for old internal scripts during the tenant cutover.
+func (g Games) CreateForWorkspace(ctx context.Context, workspaceID, name string) (*Game, error) {
 	game := &Game{
-		AppID:     "zk_" + randomHex(6),
-		AppSecret: randomHex(24),
-		Name:      name,
+		WorkspaceID: workspaceID,
+		AppID:       "zk_" + randomHex(6),
+		AppSecret:   randomHex(24),
+		Name:        name,
 	}
 	err := g.DB.QueryRow(ctx,
-		`INSERT INTO games (app_id, app_secret, name) VALUES ($1, $2, $3)
+		`INSERT INTO games (workspace_id, app_id, app_secret, name) VALUES ($1, $2, $3, $4)
 		 RETURNING id, status, created_at, friend_limit`,
-		game.AppID, game.AppSecret, game.Name,
+		game.WorkspaceID, game.AppID, game.AppSecret, game.Name,
 	).Scan(&game.ID, &game.Status, &game.CreatedAt, &game.FriendLimit)
 	if err != nil {
 		return nil, err
@@ -37,7 +44,7 @@ func (g Games) Create(ctx context.Context, name string) (*Game, error) {
 	return game, nil
 }
 
-const gameCols = `id, app_id, app_secret, name, status, created_at, sso_redirect_urls, func_http_allowlist, friend_limit`
+const gameCols = `id, workspace_id, app_id, app_secret, name, status, created_at, sso_redirect_urls, func_http_allowlist, friend_limit`
 
 func (g Games) ByAppID(ctx context.Context, appID string) (*Game, error) {
 	return g.scanOne(g.DB.QueryRow(ctx,
@@ -51,7 +58,7 @@ func (g Games) ByID(ctx context.Context, id string) (*Game, error) {
 
 func (g Games) scanOne(row pgx.Row) (*Game, error) {
 	var game Game
-	err := row.Scan(&game.ID, &game.AppID, &game.AppSecret, &game.Name, &game.Status, &game.CreatedAt,
+	err := row.Scan(&game.ID, &game.WorkspaceID, &game.AppID, &game.AppSecret, &game.Name, &game.Status, &game.CreatedAt,
 		&game.SSORedirectURLs, &game.FuncHTTPAllowlist, &game.FriendLimit)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -76,6 +83,24 @@ func (g Games) UpdateFriendLimit(ctx context.Context, id string, limit int) erro
 func (g Games) List(ctx context.Context) ([]Game, error) {
 	rows, err := g.DB.Query(ctx,
 		`SELECT `+gameCols+` FROM games ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	games := []Game{}
+	for rows.Next() {
+		game, err := g.scanOne(rows)
+		if err != nil {
+			return nil, err
+		}
+		games = append(games, *game)
+	}
+	return games, rows.Err()
+}
+
+func (g Games) ListByWorkspace(ctx context.Context, workspaceID string) ([]Game, error) {
+	rows, err := g.DB.Query(ctx,
+		`SELECT `+gameCols+` FROM games WHERE workspace_id=$1 ORDER BY created_at DESC`, workspaceID)
 	if err != nil {
 		return nil, err
 	}

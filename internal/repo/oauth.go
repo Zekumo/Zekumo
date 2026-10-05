@@ -11,6 +11,7 @@ import (
 
 type OAuthClient struct {
 	ID           string    `json:"id"`
+	WorkspaceID  string    `json:"workspace_id"`
 	ClientID     string    `json:"client_id"`
 	ClientSecret string    `json:"client_secret,omitempty"`
 	Name         string    `json:"name"`
@@ -27,11 +28,11 @@ type OAuthGrant struct {
 
 type OAuthClients struct{ DB *pgxpool.Pool }
 
-const oauthClientCols = `id, client_id, client_secret, name, redirect_urls, created_at`
+const oauthClientCols = `id, workspace_id, client_id, client_secret, name, redirect_urls, created_at`
 
 func scanOAuthClient(row pgx.Row) (*OAuthClient, error) {
 	var c OAuthClient
-	err := row.Scan(&c.ID, &c.ClientID, &c.ClientSecret, &c.Name, &c.RedirectURLs, &c.CreatedAt)
+	err := row.Scan(&c.ID, &c.WorkspaceID, &c.ClientID, &c.ClientSecret, &c.Name, &c.RedirectURLs, &c.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -44,14 +45,18 @@ func scanOAuthClient(row pgx.Row) (*OAuthClient, error) {
 // Create registers a client. confidential=false makes a public (PKCE-only)
 // client with no secret, e.g. a mobile app or SPA.
 func (r OAuthClients) Create(ctx context.Context, name, redirectURLs string, confidential bool) (*OAuthClient, error) {
+	return r.CreateForWorkspace(ctx, "00000000-0000-4000-8000-000000000002", name, redirectURLs, confidential)
+}
+
+func (r OAuthClients) CreateForWorkspace(ctx context.Context, workspaceID, name, redirectURLs string, confidential bool) (*OAuthClient, error) {
 	secret := ""
 	if confidential {
 		secret = randomHex(24)
 	}
 	return scanOAuthClient(r.DB.QueryRow(ctx,
-		`INSERT INTO oauth_clients (client_id, client_secret, name, redirect_urls)
-		 VALUES ($1, $2, $3, $4) RETURNING `+oauthClientCols,
-		"oc_"+randomHex(8), secret, name, redirectURLs))
+		`INSERT INTO oauth_clients (workspace_id, client_id, client_secret, name, redirect_urls)
+		 VALUES ($1, $2, $3, $4, $5) RETURNING `+oauthClientCols,
+		workspaceID, "oc_"+randomHex(8), secret, name, redirectURLs))
 }
 
 func (r OAuthClients) ByClientID(ctx context.Context, clientID string) (*OAuthClient, error) {
@@ -61,6 +66,24 @@ func (r OAuthClients) ByClientID(ctx context.Context, clientID string) (*OAuthCl
 
 func (r OAuthClients) List(ctx context.Context) ([]OAuthClient, error) {
 	rows, err := r.DB.Query(ctx, `SELECT `+oauthClientCols+` FROM oauth_clients ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	clients := []OAuthClient{}
+	for rows.Next() {
+		c, err := scanOAuthClient(rows)
+		if err != nil {
+			return nil, err
+		}
+		clients = append(clients, *c)
+	}
+	return clients, rows.Err()
+}
+
+func (r OAuthClients) ListByWorkspace(ctx context.Context, workspaceID string) ([]OAuthClient, error) {
+	rows, err := r.DB.Query(ctx,
+		`SELECT `+oauthClientCols+` FROM oauth_clients WHERE workspace_id=$1 ORDER BY created_at DESC`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -89,8 +112,32 @@ func (r OAuthClients) Update(ctx context.Context, clientID, name, redirectURLs s
 	return nil
 }
 
+func (r OAuthClients) UpdateForWorkspace(ctx context.Context, workspaceID, clientID, name, redirectURLs string) error {
+	tag, err := r.DB.Exec(ctx,
+		`UPDATE oauth_clients SET name=COALESCE(NULLIF($3,''),name), redirect_urls=$4
+		 WHERE workspace_id=$1 AND client_id=$2`, workspaceID, clientID, name, redirectURLs)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r OAuthClients) Delete(ctx context.Context, clientID string) error {
 	tag, err := r.DB.Exec(ctx, `DELETE FROM oauth_clients WHERE client_id = $1`, clientID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r OAuthClients) DeleteForWorkspace(ctx context.Context, workspaceID, clientID string) error {
+	tag, err := r.DB.Exec(ctx, `DELETE FROM oauth_clients WHERE workspace_id=$1 AND client_id=$2`, workspaceID, clientID)
 	if err != nil {
 		return err
 	}

@@ -6,12 +6,13 @@ import (
 )
 
 type Game struct {
-	ID        string    `json:"id"`
-	AppID     string    `json:"app_id"`
-	AppSecret string    `json:"app_secret,omitempty"`
-	Name      string    `json:"name"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          string    `json:"id"`
+	WorkspaceID string    `json:"workspace_id"`
+	AppID       string    `json:"app_id"`
+	AppSecret   string    `json:"app_secret,omitempty"`
+	Name        string    `json:"name"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
 
 	// SSORedirectURLs is a newline-separated list of allowed redirect URL
 	// prefixes for the hosted SSO authorize page.

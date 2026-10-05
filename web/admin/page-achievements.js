@@ -10,7 +10,7 @@ async function renderAchievements(host) {
   pageShell(host, {
     title: '成就',
     subtitle: '定义成就目标，由服务端解锁；隐藏成就在玩家解锁前不会泄露详情。',
-    actions: `<button class="btn filled" onclick="achievementDialog()">新建成就</button>`,
+    actions: `<button class="btn filled" data-write onclick="achievementDialog()">新建成就</button>`,
     body: rows.length ? `<div class="card table-card"><table>
       <thead><tr><th>成就</th><th>类型</th><th>稀有度</th><th>目标</th><th>状态</th><th></th></tr></thead>
       <tbody>${rows.map(achievementRow).join('')}</tbody>
@@ -27,9 +27,9 @@ function achievementRow(a) {
     <td>${a.type === 'progress' ? fmtNum(a.target) : '—'}</td>
     <td><span class="badge">已配置</span></td>
     <td><div class="row">
-      <button class="btn text" onclick="achievementDialog(${inlineJSON(a)})">编辑</button>
-      <button class="btn text" onclick="unlockAchievement(${inlineJSON(a.id)},${inlineJSON(a.name)})">解锁</button>
-      <button class="btn text danger" onclick="deleteAchievement(${inlineJSON(a.id)},${inlineJSON(a.name)})">删除</button>
+      <button class="btn text" data-write onclick="achievementDialog(${inlineJSON(a)})">编辑</button>
+      <button class="btn text" data-write onclick="unlockAchievement(${inlineJSON(a.id)},${inlineJSON(a.name)})">解锁</button>
+      <button class="btn text danger" data-write onclick="deleteAchievement(${inlineJSON(a.id)},${inlineJSON(a.name)})">删除</button>
     </div></td>
   </tr>`;
 }

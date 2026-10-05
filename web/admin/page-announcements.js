@@ -8,7 +8,7 @@ async function renderAnnouncements(host) {
   pageShell(host, {
     title: '公告',
     subtitle: '客户端通过轮询增量获取公告；可按平台和渠道定向发布。',
-    actions: `<button class="btn filled" onclick="announcementDialog()">发布公告</button>`,
+    actions: `<button class="btn filled" data-write onclick="announcementDialog()">发布公告</button>`,
     body: rows.length ? `<div class="card table-card"><table>
       <thead><tr><th>公告</th><th>重要性</th><th>定向</th><th>有效期</th><th>状态</th><th></th></tr></thead>
       <tbody>${rows.map(announcementRow).join('')}</tbody>
@@ -27,8 +27,8 @@ function announcementRow(a) {
     <td><span class="badge ${a.active && !expired ? 'ok' : ''}">${stateLabel}</span></td>
     <td><div class="row">
       <button class="btn text" onclick="previewAnnouncement(${inlineJSON(a)})">预览</button>
-      <button class="btn text" onclick="announcementDialog(${inlineJSON(a)})">编辑</button>
-      ${a.active ? `<button class="btn text danger" onclick="deactivateAnnouncement(${inlineJSON(a.id)})">下架</button>` : ''}
+      <button class="btn text" data-write onclick="announcementDialog(${inlineJSON(a)})">编辑</button>
+      ${a.active ? `<button class="btn text danger" data-write onclick="deactivateAnnouncement(${inlineJSON(a.id)})">下架</button>` : ''}
     </div></td>
   </tr>`;
 }

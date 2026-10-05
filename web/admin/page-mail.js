@@ -5,18 +5,20 @@ const MAIL_MAX_RECIPIENTS = 1000;
 const MAIL_DEFAULT_DAYS = 30;
 
 async function renderMail(host) {
+  const ctx = operationContext();
   // The reward picker needs the currency catalogue, so both load together.
   const [{ mail }, { currencies }] = await Promise.all([
-    api('GET', `/admin/api/games/${state.gameId}/mail`),
-    api('GET', `/admin/api/games/${state.gameId}/currencies`),
+    api('GET', `/admin/api/games/${ctx.gameId}/mail`),
+    api('GET', `/admin/api/games/${ctx.gameId}/currencies`),
   ]);
+  if (!contextCurrent(ctx)) return;
   const rows = mail || [];
   window.__mailCurrencies = currencies || [];
 
   pageShell(host, {
     title: '游戏内邮件',
     subtitle: `向全服或指定玩家发送系统邮件，可附带货币奖励；默认 ${MAIL_DEFAULT_DAYS} 天有效。`,
-    actions: `<button class="btn filled" onclick="mailDialog()">发送邮件</button>`,
+    actions: `<button class="btn filled" data-write onclick="mailDialog()">发送邮件</button>`,
     body: rows.length ? `<div class="card table-card"><table>
         <thead><tr><th>邮件</th><th>投递</th><th>附件</th><th>已读</th><th>领取率</th><th>有效期</th><th></th></tr></thead>
         <tbody>${rows.map(mailRow).join('')}</tbody>

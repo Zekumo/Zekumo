@@ -35,7 +35,7 @@ function renderAccount() {
       <span class="avatar lg" style="background:hsl(${hue} 42% 42%)">${esc(initials(me.username))}</span>
       <div>
         <div class="menu-name">${esc(me.username)}</div>
-        <div class="dim">${me.role === 'admin' ? '平台管理员' : esc(me.role)}</div>
+        <div class="dim">${state.workspaceId ? esc(roleLabel(state.activeRole)) : '账号'}</div>
       </div>
     </div>
     <div class="menu-info">
@@ -61,9 +61,48 @@ document.addEventListener('click', () => {
   document.getElementById('accountMenu')?.classList.add('hidden');
 });
 
-async function loadMe() {
-  state.me = await api('GET', '/admin/api/me');
+function normalizeMe(data) {
+  const user = data.user || {};
+  return {
+    ...data,
+    id: user.id || data.id,
+    username: user.username || data.username,
+    role: data.active_role || data.role,
+  };
+}
+
+async function loadMe(workspaceId = state.workspaceId) {
+  const session = state.sessionEpoch;
+  const data = await api('GET', '/admin/api/me', undefined, { workspaceId });
+  if (session !== state.sessionEpoch || workspaceId !== state.workspaceId) return null;
+  state.me = normalizeMe(data);
+  state.workspaces = data.workspaces || state.workspaces || [];
+  state.workspace = state.workspaces.find(w => w.id === state.workspaceId) || null;
+  state.activeRole = data.active_role || state.workspace?.role || null;
   renderAccount();
+  return state.me;
+}
+
+async function refreshIdentity(workspaceId = state.workspaceId) {
+  if (!token || workspaceId !== state.workspaceId) return;
+  const previousRole = state.activeRole;
+  const me = await loadMe(workspaceId);
+  if (!me) return;
+  const stillMember = state.workspaces.some(w => w.id === workspaceId);
+  if (!stillMember) {
+    const fallback = state.workspaces[0];
+    if (fallback && typeof selectWorkspace === 'function') selectWorkspace(fallback.id);
+    else if (!fallback && typeof renderWorkspaceWelcome === 'function') renderWorkspaceWelcome();
+    return;
+  }
+  if (previousRole !== state.activeRole && typeof activateWorkspace === 'function') {
+    await activateWorkspace(workspaceId);
+    await route();
+    return;
+  }
+  renderAccount();
+  if (typeof renderWorkspaceSwitcher === 'function') renderWorkspaceSwitcher();
+  applySurfaceAccess(document.getElementById('page'));
 }
 
 // securityBanner warns, in the console itself, about credentials that are

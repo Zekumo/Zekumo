@@ -70,10 +70,11 @@ func (t *TokenIssuer) IssueAccount(accountID, nickname string) (string, error) {
 	})
 }
 
-func (t *TokenIssuer) IssueAdmin(username string) (string, error) {
+func (t *TokenIssuer) IssueAdmin(identityID, username string) (string, error) {
 	return t.issue(Claims{
-		RegisteredClaims: jwt.RegisteredClaims{Subject: username},
+		RegisteredClaims: jwt.RegisteredClaims{Subject: identityID},
 		Role:             RoleAdmin,
+		Nickname:         username,
 	})
 }
 

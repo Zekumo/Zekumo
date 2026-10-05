@@ -38,7 +38,7 @@ func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Zekumo-Workspace-ID")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -55,7 +55,9 @@ func withLogging(logSvc *logs.Service, logAll bool, next http.Handler) http.Hand
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
-		r = r.WithContext(httpx.ContextWithGameIDSlot(r.Context()))
+		ctx := httpx.ContextWithGameIDSlot(r.Context())
+		ctx = httpx.ContextWithWorkspaceIDSlot(ctx)
+		r = r.WithContext(ctx)
 		next.ServeHTTP(sw, r)
 		dur := time.Since(start)
 		log.Printf("%s %s -> %d (%s)", r.Method, r.URL.Path, sw.status, dur.Round(time.Millisecond))

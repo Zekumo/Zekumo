@@ -18,6 +18,7 @@ import (
 
 	"zekumo/internal/httpx"
 	"zekumo/internal/repo"
+	"zekumo/internal/tenant"
 )
 
 const counterTTL = 72 * time.Hour
@@ -236,30 +237,32 @@ type Retention struct {
 
 // retention counts, per cohort day, how many of the players first seen that
 // day have logged in again since.
-func (s *Service) retention(ctx context.Context) (Retention, error) {
+func (s *Service) retention(ctx context.Context, workspaceID string) (Retention, error) {
 	var r Retention
 	tz := s.Loc.String()
 	err := s.DB.QueryRow(ctx,
 		`WITH p AS (
-		   SELECT (created_at AT TIME ZONE $1)::date    AS born,
-		          (last_login_at AT TIME ZONE $1)::date AS seen
-		   FROM players
+			   SELECT (p0.created_at AT TIME ZONE $1)::date    AS born,
+			          (p0.last_login_at AT TIME ZONE $1)::date AS seen
+			   FROM players p0 JOIN games g ON g.id=p0.game_id
+			   WHERE g.workspace_id=$2
 		 )
 		 SELECT
 		   count(*) FILTER (WHERE born = (now() AT TIME ZONE $1)::date - 1),
 		   count(*) FILTER (WHERE born = (now() AT TIME ZONE $1)::date - 1 AND seen > born),
 		   count(*) FILTER (WHERE born = (now() AT TIME ZONE $1)::date - 7),
 		   count(*) FILTER (WHERE born = (now() AT TIME ZONE $1)::date - 7 AND seen > born)
-		 FROM p`, tz,
+			 FROM p`, tz, workspaceID,
 	).Scan(&r.D1Cohort, &r.D1Back, &r.D7Cohort, &r.D7Back)
 	return r, err
 }
 
 // gameTrends returns each game's daily active counts since the given day.
-func (s *Service) gameTrends(ctx context.Context, since string) (map[string]map[string]int, error) {
+func (s *Service) gameTrends(ctx context.Context, since, workspaceID string) (map[string]map[string]int, error) {
 	rows, err := s.DB.Query(ctx,
 		`SELECT game_id::text, to_char(date, 'YYYY-MM-DD'), active
-		 FROM stats_daily WHERE date >= $1::date`, since)
+		 FROM stats_daily d JOIN games g ON g.id=d.game_id
+		 WHERE date >= $1::date AND g.workspace_id=$2`, since, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -281,18 +284,22 @@ func (s *Service) gameTrends(ctx context.Context, since string) (map[string]map[
 
 // Platform aggregates every game's activity. Today comes from Redis (not yet
 // flushed) and older days from Postgres, the same split Query uses per game.
-func (s *Service) Platform(ctx context.Context, days int, online func(string) int) (*PlatformStats, error) {
+func (s *Service) Platform(ctx context.Context, workspaceID string, days int, online func(string) int) (*PlatformStats, error) {
 	out := &PlatformStats{Timezone: s.Loc.String()}
-	games, err := s.Games.List(ctx)
+	games, err := s.Games.ListByWorkspace(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
 	out.Totals.Games = len(games)
 
-	if err := s.DB.QueryRow(ctx, `SELECT count(*) FROM players`).Scan(&out.Totals.Players); err != nil {
+	if err := s.DB.QueryRow(ctx,
+		`SELECT count(*) FROM players p JOIN games g ON g.id=p.game_id WHERE g.workspace_id=$1`,
+		workspaceID).Scan(&out.Totals.Players); err != nil {
 		return nil, err
 	}
-	if err := s.DB.QueryRow(ctx, `SELECT count(*) FROM accounts`).Scan(&out.Totals.Accounts); err != nil {
+	if err := s.DB.QueryRow(ctx,
+		`SELECT count(DISTINCT p.account_id) FROM players p JOIN games g ON g.id=p.game_id
+		 WHERE g.workspace_id=$1 AND p.account_id IS NOT NULL`, workspaceID).Scan(&out.Totals.Accounts); err != nil {
 		return nil, err
 	}
 
@@ -303,7 +310,8 @@ func (s *Service) Platform(ctx context.Context, days int, online func(string) in
 	// Stored history, summed across games.
 	rows, err := s.DB.Query(ctx,
 		`SELECT to_char(date, 'YYYY-MM-DD'), sum(active), sum(logins), sum(new_players)
-		 FROM stats_daily WHERE date >= $1::date GROUP BY date ORDER BY date`, since)
+			 FROM stats_daily d JOIN games g ON g.id=d.game_id
+			 WHERE date >= $1::date AND g.workspace_id=$2 GROUP BY date ORDER BY date`, since, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -321,12 +329,12 @@ func (s *Service) Platform(ctx context.Context, days int, online func(string) in
 		return nil, err
 	}
 
-	if out.Retention, err = s.retention(ctx); err != nil {
+	if out.Retention, err = s.retention(ctx, workspaceID); err != nil {
 		return nil, err
 	}
 	// A week of per-game history powers the sparkline in the games table.
 	trendFrom := s.dayKey(now.Add(-6 * 24 * time.Hour))
-	trends, err := s.gameTrends(ctx, trendFrom)
+	trends, err := s.gameTrends(ctx, trendFrom, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +402,7 @@ func (h *Handler) PlatformStats(w http.ResponseWriter, r *http.Request) {
 	if days <= 0 || days > 90 {
 		days = 30
 	}
-	res, err := h.Svc.Platform(r.Context(), days, h.Online)
+	res, err := h.Svc.Platform(r.Context(), tenant.FromContext(r.Context()).WorkspaceID, days, h.Online)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return

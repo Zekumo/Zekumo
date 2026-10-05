@@ -10,6 +10,7 @@ import (
 	"zekumo/internal/httpx"
 	"zekumo/internal/ratelimit"
 	"zekumo/internal/storage"
+	"zekumo/internal/tenant"
 	"zekumo/web"
 )
 
@@ -155,99 +156,111 @@ func registerAdmin(rt router) {
 	d := rt.d
 	rt.anon("POST /admin/api/login", adminRule, d.adminH.Login)
 	a := func(pattern string, fn http.HandlerFunc) { rt.role(auth.RoleAdmin, pattern, fn) }
+	ta := func(pattern, minRole string, resource tenant.Resource, fn http.HandlerFunc) {
+		rt.Handle(pattern, d.authH.Middleware(auth.RoleAdmin,
+			d.tenants.Require(minRole, resource, fn)))
+	}
 
+	// Identity and workspace discovery are intentionally header-exempt.
 	a("GET /admin/api/me", d.adminH.Me)
-	a("GET /admin/api/games", d.adminH.ListGames)
-	a("POST /admin/api/games", d.adminH.CreateGame)
-	a("DELETE /admin/api/games/{id}", d.adminH.DeleteGame)
-	a("GET /admin/api/games/{id}/players", d.adminH.ListPlayers)
-	a("GET /admin/api/players/{pid}/data", d.adminH.PlayerData)
-	a("GET /admin/api/accounts", d.adminH.ListAccounts)
-	a("DELETE /admin/api/accounts/{id}", d.adminH.DeleteAccount)
-	a("PUT /admin/api/games/{id}/sso", d.adminH.UpdateGameSSO)
-	a("PUT /admin/api/games/{id}/http-allowlist", d.adminH.UpdateGameHTTPAllowlist)
-	a("PUT /admin/api/games/{id}/friend-limit", d.adminH.UpdateGameFriendLimit)
+	a("GET /admin/api/workspaces", d.tenantH.ListWorkspaces)
+	a("POST /admin/api/workspaces", d.tenantH.CreateWorkspace)
+	ta("GET /admin/api/workspaces/{workspace_id}/members", "viewer", tenant.ResourceWorkspace, d.tenantH.ListMembers)
+	ta("POST /admin/api/workspaces/{workspace_id}/members", "admin", tenant.ResourceWorkspace, d.tenantH.AddMember)
+	ta("PUT /admin/api/workspaces/{workspace_id}/members/{user_id}", "admin", tenant.ResourceWorkspace, d.tenantH.UpdateMember)
+	ta("DELETE /admin/api/workspaces/{workspace_id}/members/{user_id}", "admin", tenant.ResourceWorkspace, d.tenantH.RemoveMember)
 
-	a("GET /admin/api/oauth/clients", d.adminH.ListOAuthClients)
-	a("POST /admin/api/oauth/clients", d.adminH.CreateOAuthClient)
-	a("PUT /admin/api/oauth/clients/{client_id}", d.adminH.UpdateOAuthClient)
-	a("DELETE /admin/api/oauth/clients/{client_id}", d.adminH.DeleteOAuthClient)
+	ta("GET /admin/api/games", "viewer", tenant.ResourceNone, d.adminH.ListGames)
+	ta("POST /admin/api/games", "admin", tenant.ResourceNone, d.adminH.CreateGame)
+	ta("DELETE /admin/api/games/{id}", "owner", tenant.ResourceGame, d.adminH.DeleteGame)
+	ta("GET /admin/api/games/{id}/players", "viewer", tenant.ResourceGame, d.adminH.ListPlayers)
+	ta("GET /admin/api/players/{pid}/data", "viewer", tenant.ResourcePlayer, d.adminH.PlayerData)
+	ta("GET /admin/api/accounts", "viewer", tenant.ResourceNone, d.adminH.ListAccounts)
+	ta("DELETE /admin/api/accounts/{id}", "owner", tenant.ResourceAccount, d.adminH.DeleteAccount)
+	ta("PUT /admin/api/games/{id}/sso", "editor", tenant.ResourceGame, d.adminH.UpdateGameSSO)
+	ta("PUT /admin/api/games/{id}/http-allowlist", "editor", tenant.ResourceGame, d.adminH.UpdateGameHTTPAllowlist)
+	ta("PUT /admin/api/games/{id}/friend-limit", "editor", tenant.ResourceGame, d.adminH.UpdateGameFriendLimit)
 
-	a("GET /admin/api/games/{id}/dialogues", d.adminH.ListDialogues)
-	a("GET /admin/api/games/{id}/dialogues/{key}", d.adminH.GetDialogue)
-	a("PUT /admin/api/games/{id}/dialogues/{key}", d.adminH.PutDialogue)
-	a("DELETE /admin/api/games/{id}/dialogues/{key}", d.adminH.DeleteDialogue)
+	ta("GET /admin/api/oauth/clients", "viewer", tenant.ResourceNone, d.adminH.ListOAuthClients)
+	ta("POST /admin/api/oauth/clients", "admin", tenant.ResourceNone, d.adminH.CreateOAuthClient)
+	ta("PUT /admin/api/oauth/clients/{client_id}", "editor", tenant.ResourceOAuthClient, d.adminH.UpdateOAuthClient)
+	ta("DELETE /admin/api/oauth/clients/{client_id}", "admin", tenant.ResourceOAuthClient, d.adminH.DeleteOAuthClient)
 
-	a("GET /admin/api/games/{id}/functions", d.fnH.List)
-	a("GET /admin/api/games/{id}/functions/{name}", d.fnH.Get)
-	a("PUT /admin/api/games/{id}/functions/{name}", d.fnH.Put)
-	a("DELETE /admin/api/games/{id}/functions/{name}", d.fnH.Delete)
-	a("POST /admin/api/games/{id}/functions/{name}/test", d.fnH.Test)
+	ta("GET /admin/api/games/{id}/dialogues", "viewer", tenant.ResourceGame, d.adminH.ListDialogues)
+	ta("GET /admin/api/games/{id}/dialogues/{key}", "viewer", tenant.ResourceGame, d.adminH.GetDialogue)
+	ta("PUT /admin/api/games/{id}/dialogues/{key}", "editor", tenant.ResourceGame, d.adminH.PutDialogue)
+	ta("DELETE /admin/api/games/{id}/dialogues/{key}", "editor", tenant.ResourceGame, d.adminH.DeleteDialogue)
 
-	a("GET /admin/api/games/{id}/webhooks", d.hooksH.List)
-	a("POST /admin/api/games/{id}/webhooks", d.hooksH.Create)
-	a("PUT /admin/api/webhooks/{wid}", d.hooksH.Update)
-	a("DELETE /admin/api/webhooks/{wid}", d.hooksH.Delete)
-	a("GET /admin/api/webhooks/{wid}/deliveries", d.hooksH.Deliveries)
-	a("POST /admin/api/webhooks/{wid}/test", d.hooksH.Test)
+	ta("GET /admin/api/games/{id}/functions", "viewer", tenant.ResourceGame, d.fnH.List)
+	ta("GET /admin/api/games/{id}/functions/{name}", "viewer", tenant.ResourceGame, d.fnH.Get)
+	ta("PUT /admin/api/games/{id}/functions/{name}", "editor", tenant.ResourceGame, d.fnH.Put)
+	ta("DELETE /admin/api/games/{id}/functions/{name}", "editor", tenant.ResourceGame, d.fnH.Delete)
+	ta("POST /admin/api/games/{id}/functions/{name}/test", "editor", tenant.ResourceGame, d.fnH.Test)
 
-	a("GET /admin/api/stats", d.statsH.PlatformStats)
-	a("GET /admin/api/health", d.healthH.Health)
-	a("GET /admin/api/games/{id}/leaderboards", d.lbH.AdminBoards)
-	a("GET /admin/api/games/{id}/leaderboards/{board}", d.lbH.AdminTop)
-	a("GET /admin/api/games/{id}/stats", d.statsH.GameStats)
-	a("GET /admin/api/logs", d.logsH.AdminQuery)
+	ta("GET /admin/api/games/{id}/webhooks", "viewer", tenant.ResourceGame, d.hooksH.List)
+	ta("POST /admin/api/games/{id}/webhooks", "editor", tenant.ResourceGame, d.hooksH.Create)
+	ta("PUT /admin/api/webhooks/{wid}", "editor", tenant.ResourceWebhook, d.hooksH.Update)
+	ta("DELETE /admin/api/webhooks/{wid}", "editor", tenant.ResourceWebhook, d.hooksH.Delete)
+	ta("GET /admin/api/webhooks/{wid}/deliveries", "viewer", tenant.ResourceWebhook, d.hooksH.Deliveries)
+	ta("POST /admin/api/webhooks/{wid}/test", "editor", tenant.ResourceWebhook, d.hooksH.Test)
+
+	ta("GET /admin/api/stats", "viewer", tenant.ResourceNone, d.statsH.PlatformStats)
+	ta("GET /admin/api/health", "owner", tenant.ResourceNone, d.healthH.Health)
+	ta("GET /admin/api/games/{id}/leaderboards", "viewer", tenant.ResourceGame, d.lbH.AdminBoards)
+	ta("GET /admin/api/games/{id}/leaderboards/{board}", "viewer", tenant.ResourceGame, d.lbH.AdminTop)
+	ta("GET /admin/api/games/{id}/stats", "viewer", tenant.ResourceGame, d.statsH.GameStats)
+	ta("GET /admin/api/logs", "viewer", tenant.ResourceNone, d.logsH.AdminQuery)
 
 	// Release management (update distribution).
-	a("GET /admin/api/games/{id}/releases", d.updatesH.ListReleases)
-	a("POST /admin/api/games/{id}/releases", d.updatesH.CreateRelease)
-	a("DELETE /admin/api/games/{id}/releases/{version}", d.updatesH.DeleteRelease)
-	a("GET /admin/api/games/{id}/releases/{version}/artifacts", d.updatesH.ListArtifacts)
-	a("POST /admin/api/games/{id}/releases/{version}/artifacts", d.updatesH.CreateArtifact)
-	a("POST /admin/api/games/{id}/releases/{version}/artifacts/{aid}/complete", d.updatesH.CompleteArtifact)
-	a("POST /admin/api/games/{id}/releases/{version}/publish", d.updatesH.Publish)
-	a("POST /admin/api/games/{id}/releases/{version}/rollout", d.updatesH.Rollout)
-	a("POST /admin/api/games/{id}/releases/{version}/revoke", d.updatesH.Revoke)
+	ta("GET /admin/api/games/{id}/releases", "viewer", tenant.ResourceGame, d.updatesH.ListReleases)
+	ta("POST /admin/api/games/{id}/releases", "editor", tenant.ResourceGame, d.updatesH.CreateRelease)
+	ta("DELETE /admin/api/games/{id}/releases/{version}", "editor", tenant.ResourceGame, d.updatesH.DeleteRelease)
+	ta("GET /admin/api/games/{id}/releases/{version}/artifacts", "viewer", tenant.ResourceGame, d.updatesH.ListArtifacts)
+	ta("POST /admin/api/games/{id}/releases/{version}/artifacts", "editor", tenant.ResourceGame, d.updatesH.CreateArtifact)
+	ta("POST /admin/api/games/{id}/releases/{version}/artifacts/{aid}/complete", "editor", tenant.ResourceArtifact, d.updatesH.CompleteArtifact)
+	ta("POST /admin/api/games/{id}/releases/{version}/publish", "editor", tenant.ResourceGame, d.updatesH.Publish)
+	ta("POST /admin/api/games/{id}/releases/{version}/rollout", "editor", tenant.ResourceGame, d.updatesH.Rollout)
+	ta("POST /admin/api/games/{id}/releases/{version}/revoke", "editor", tenant.ResourceGame, d.updatesH.Revoke)
 
 	// Achievements
-	a("GET /admin/api/games/{id}/achievements", d.achievementsH.AdminList)
-	a("POST /admin/api/games/{id}/achievements", d.achievementsH.AdminCreate)
-	a("PUT /admin/api/achievements/{aid}", d.achievementsH.AdminUpdate)
-	a("DELETE /admin/api/achievements/{aid}", d.achievementsH.AdminDelete)
-	a("POST /admin/api/achievements/{aid}/unlock", d.achievementsH.AdminUnlock)
+	ta("GET /admin/api/games/{id}/achievements", "viewer", tenant.ResourceGame, d.achievementsH.AdminList)
+	ta("POST /admin/api/games/{id}/achievements", "editor", tenant.ResourceGame, d.achievementsH.AdminCreate)
+	ta("PUT /admin/api/achievements/{aid}", "editor", tenant.ResourceAchievement, d.achievementsH.AdminUpdate)
+	ta("DELETE /admin/api/achievements/{aid}", "editor", tenant.ResourceAchievement, d.achievementsH.AdminDelete)
+	ta("POST /admin/api/achievements/{aid}/unlock", "editor", tenant.ResourceAchievement, d.achievementsH.AdminUnlock)
 
 	// Announcements
-	a("GET /admin/api/games/{id}/announcements", d.announcementsH.AdminList)
-	a("POST /admin/api/games/{id}/announcements", d.announcementsH.AdminCreate)
-	a("PUT /admin/api/announcements/{aid}", d.announcementsH.AdminUpdate)
-	a("DELETE /admin/api/announcements/{aid}", d.announcementsH.AdminDeactivate)
+	ta("GET /admin/api/games/{id}/announcements", "viewer", tenant.ResourceGame, d.announcementsH.AdminList)
+	ta("POST /admin/api/games/{id}/announcements", "editor", tenant.ResourceGame, d.announcementsH.AdminCreate)
+	ta("PUT /admin/api/announcements/{aid}", "editor", tenant.ResourceAnnouncement, d.announcementsH.AdminUpdate)
+	ta("DELETE /admin/api/announcements/{aid}", "editor", tenant.ResourceAnnouncement, d.announcementsH.AdminDeactivate)
 
 	// Currency
-	a("GET /admin/api/games/{id}/currencies", d.currencyH.AdminList)
-	a("POST /admin/api/games/{id}/currencies", d.currencyH.AdminCreate)
-	a("PUT /admin/api/currencies/{cid}", d.currencyH.AdminUpdate)
-	a("DELETE /admin/api/currencies/{cid}", d.currencyH.AdminDelete)
-	a("POST /admin/api/games/{id}/currency/{cid}/grant", d.currencyH.AdminGrant)
-	a("GET /admin/api/players/{pid}/currency", d.currencyH.AdminPlayerBalances)
-	a("GET /admin/api/players/{pid}/currency/{cid}/ledger", d.currencyH.AdminPlayerLedger)
+	ta("GET /admin/api/games/{id}/currencies", "viewer", tenant.ResourceGame, d.currencyH.AdminList)
+	ta("POST /admin/api/games/{id}/currencies", "editor", tenant.ResourceGame, d.currencyH.AdminCreate)
+	ta("PUT /admin/api/currencies/{cid}", "editor", tenant.ResourceCurrency, d.currencyH.AdminUpdate)
+	ta("DELETE /admin/api/currencies/{cid}", "editor", tenant.ResourceCurrency, d.currencyH.AdminDelete)
+	ta("POST /admin/api/games/{id}/currency/{cid}/grant", "editor", tenant.ResourceGameCurrency, d.currencyH.AdminGrant)
+	ta("GET /admin/api/players/{pid}/currency", "viewer", tenant.ResourcePlayer, d.currencyH.AdminPlayerBalances)
+	ta("GET /admin/api/players/{pid}/currency/{cid}/ledger", "viewer", tenant.ResourcePlayerCurrency, d.currencyH.AdminPlayerLedger)
 
 	// Mail
-	a("POST /admin/api/games/{id}/mail", d.mailH.AdminSend)
-	a("GET /admin/api/games/{id}/mail", d.mailH.AdminList)
+	ta("POST /admin/api/games/{id}/mail", "editor", tenant.ResourceGame, d.mailH.AdminSend)
+	ta("GET /admin/api/games/{id}/mail", "viewer", tenant.ResourceGame, d.mailH.AdminList)
 
 	// Retention stats
-	a("GET /admin/api/games/{id}/stats/retention", d.statsH.Retention)
-	a("GET /admin/api/games/{id}/stats/funnel", d.statsH.Funnel)
+	ta("GET /admin/api/games/{id}/stats/retention", "viewer", tenant.ResourceGame, d.statsH.Retention)
+	ta("GET /admin/api/games/{id}/stats/funnel", "viewer", tenant.ResourceGame, d.statsH.Funnel)
 
 	// Bans
-	a("POST /admin/api/players/{pid}/ban", d.bansH.Ban)
-	a("POST /admin/api/players/{pid}/unban", d.bansH.Unban)
-	a("GET /admin/api/games/{id}/bans", d.bansH.List)
+	ta("POST /admin/api/players/{pid}/ban", "editor", tenant.ResourcePlayer, d.bansH.Ban)
+	ta("POST /admin/api/players/{pid}/unban", "editor", tenant.ResourcePlayer, d.bansH.Unban)
+	ta("GET /admin/api/games/{id}/bans", "viewer", tenant.ResourceGame, d.bansH.List)
 
 	// Data exports
-	a("POST /admin/api/games/{id}/exports", d.exportsH.Submit)
-	a("GET /admin/api/exports/{job_id}", d.exportsH.Status)
-	a("GET /admin/api/games/{id}/exports", d.exportsH.History)
+	ta("POST /admin/api/games/{id}/exports", "editor", tenant.ResourceGame, d.exportsH.Submit)
+	ta("GET /admin/api/exports/{job_id}", "viewer", tenant.ResourceExport, d.exportsH.Status)
+	ta("GET /admin/api/games/{id}/exports", "viewer", tenant.ResourceGame, d.exportsH.History)
 }
 
 // registerPages serves the embedded console and the hosted login pages.

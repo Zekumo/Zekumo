@@ -6,6 +6,7 @@ import (
 
 	"zekumo/internal/auth"
 	"zekumo/internal/httpx"
+	"zekumo/internal/tenant"
 )
 
 type Handler struct{ Svc *Service }
@@ -19,12 +20,13 @@ func (h *Handler) AdminQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	beforeID, _ := strconv.ParseInt(q.Get("before_id"), 10, 64)
 	entries, err := h.Svc.Query(r.Context(), QueryFilter{
-		GameID:   q.Get("game_id"),
-		Level:    q.Get("level"),
-		Source:   q.Get("source"),
-		Search:   q.Get("q"),
-		BeforeID: beforeID,
-		Limit:    limit,
+		WorkspaceID: tenant.FromContext(r.Context()).WorkspaceID,
+		GameID:      q.Get("game_id"),
+		Level:       q.Get("level"),
+		Source:      q.Get("source"),
+		Search:      q.Get("q"),
+		BeforeID:    beforeID,
+		Limit:       limit,
 	})
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())

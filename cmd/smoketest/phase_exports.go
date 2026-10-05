@@ -78,7 +78,9 @@ func phaseExports(s *state) {
 				doc.GameID == s.gameID && doc.Scope == "all" && doc.GeneratedAt != "",
 				"envelope = game %q scope %q at %q", doc.GameID, doc.Scope, doc.GeneratedAt))
 			players := doc.Players
-			step("json export has both players", boolErr(len(players) == 2, "got %d players, want 2", len(players)))
+			// Earlier phases intentionally create SSO-backed players too; the
+			// whole-game export must include at least the two core fixtures.
+			step("json export has the core players", boolErr(len(players) >= 2, "got %d players, want at least 2", len(players)))
 
 			var alice struct {
 				found   bool

@@ -9,7 +9,7 @@ async function renderBans(host) {
   pageShell(host, {
     title: '封禁记录',
     subtitle: '封禁立即生效：已签发的令牌失效，封禁期内登录返回 403。',
-    actions: `<button class="btn filled" onclick="banDialog()">封禁玩家</button>`,
+    actions: `<button class="btn filled" data-write onclick="banDialog()">封禁玩家</button>`,
     body: rows.length ? `<div class="card table-card"><table>
         <thead><tr><th>玩家</th><th>原因</th><th>时长</th><th>状态</th><th>操作者</th><th>封禁时间</th><th></th></tr></thead>
         <tbody>${rows.map(banRow).join('')}</tbody>
@@ -38,7 +38,7 @@ function banRow(b) {
     <td class="dim">${esc(b.operator) || '—'}</td>
     <td class="dim">${fmtAgo(b.created_at)}</td>
     <td>${st.active
-      ? `<button class="btn text" onclick="unbanPlayer(${inlineJSON(b.player_id)},${inlineJSON(b.nickname)})">解禁</button>`
+      ? `<button class="btn text" data-write onclick="unbanPlayer(${inlineJSON(b.player_id)},${inlineJSON(b.nickname)})">解禁</button>`
       : ''}</td>
   </tr>`;
 }

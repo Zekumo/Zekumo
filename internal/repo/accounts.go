@@ -3,10 +3,13 @@ package repo
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+var ErrAccountSharedAcrossWorkspaces = errors.New("account is linked to another workspace")
 
 // Accounts are platform-level identities (通行证): one account can log into
 // every game on the platform; per-game players link to it via account_id.
@@ -79,4 +82,72 @@ func (r Accounts) List(ctx context.Context, search string, limit, offset int) ([
 		accounts = append(accounts, *a)
 	}
 	return accounts, rows.Err()
+}
+
+// ListByWorkspace returns global passport accounts only when they are linked
+// to a player in a game owned by the selected workspace.
+func (r Accounts) ListByWorkspace(ctx context.Context, workspaceID, search string, limit, offset int) ([]Account, error) {
+	rows, err := r.DB.Query(ctx,
+		`SELECT DISTINCT `+stringsWithAlias("a", accountCols)+`
+		 FROM accounts a JOIN players p ON p.account_id=a.id JOIN games g ON g.id=p.game_id
+		 WHERE g.workspace_id=$1
+		   AND ($2='' OR a.username ILIKE '%'||$2||'%' OR a.nickname ILIKE '%'||$2||'%')
+		 ORDER BY a.created_at DESC LIMIT $3 OFFSET $4`, workspaceID, search, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	accounts := []Account{}
+	for rows.Next() {
+		a, err := scanAccount(rows)
+		if err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, *a)
+	}
+	return accounts, rows.Err()
+}
+
+// stringsWithAlias is intentionally tiny and only used with compile-time
+// column lists in this package.
+func stringsWithAlias(alias, cols string) string {
+	parts := strings.Split(cols, ", ")
+	for i := range parts {
+		parts[i] = alias + "." + parts[i]
+	}
+	return strings.Join(parts, ", ")
+}
+
+// DeleteForWorkspace refuses to delete a passport that is linked to any game
+// outside the selected workspace. This prevents one tenant from breaking a
+// user's identity in another tenant.
+func (r Accounts) DeleteForWorkspace(ctx context.Context, workspaceID, id string) error {
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	var here, elsewhere bool
+	err = tx.QueryRow(ctx,
+		`SELECT
+		 EXISTS (SELECT 1 FROM players p JOIN games g ON g.id=p.game_id WHERE p.account_id=$1 AND g.workspace_id=$2),
+		 EXISTS (SELECT 1 FROM players p JOIN games g ON g.id=p.game_id WHERE p.account_id=$1 AND g.workspace_id<>$2)`,
+		id, workspaceID).Scan(&here, &elsewhere)
+	if err != nil {
+		return err
+	}
+	if !here {
+		return ErrNotFound
+	}
+	if elsewhere {
+		return ErrAccountSharedAcrossWorkspaces
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM accounts WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return tx.Commit(ctx)
 }

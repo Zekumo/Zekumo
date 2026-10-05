@@ -2,7 +2,8 @@
 // so this page discovers them rather than offering a "create" action.
 
 async function renderBoards(host) {
-  const { boards } = await api('GET', `/admin/api/games/${state.gameId}/leaderboards`);
+  const ctx = operationContext();
+  const { boards } = await api('GET', `/admin/api/games/${ctx.gameId}/leaderboards`);
   const active = window.__board && boards.some(b => b.board === window.__board)
     ? window.__board : boards[0]?.board;
 
@@ -16,8 +17,10 @@ async function renderBoards(host) {
     return;
   }
 
+  requireCurrentContext(ctx);
   const { entries } = await api('GET',
-    `/admin/api/games/${state.gameId}/leaderboards/${encodeURIComponent(active)}?limit=50`);
+    `/admin/api/games/${ctx.gameId}/leaderboards/${encodeURIComponent(active)}?limit=50`);
+  requireCurrentContext(ctx);
 
   pageShell(host, {
     title: '排行榜',

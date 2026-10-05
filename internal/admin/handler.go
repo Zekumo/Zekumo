@@ -6,11 +6,15 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"zekumo/internal/auth"
 	"zekumo/internal/httpx"
 	"zekumo/internal/realtime"
 	"zekumo/internal/repo"
+	"zekumo/internal/tenant"
 )
 
 // Handler exposes the developer console API: manage games, inspect players,
@@ -26,6 +30,7 @@ type Handler struct {
 	Dialogues    repo.Dialogues
 	OAuthClients repo.OAuthClients
 	Hub          *realtime.Hub
+	Tenants      tenant.Store
 
 	// DefaultJWTSecret reports that tokens are signed with the shipped
 	// development secret, so the console can say so out loud.
@@ -45,18 +50,56 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if httpx.Decode(w, r, &req) != nil {
 		return
 	}
+	req.Username = strings.TrimSpace(req.Username)
 	userOK := subtle.ConstantTimeCompare([]byte(req.Username), []byte(h.User)) == 1
 	passOK := subtle.ConstantTimeCompare([]byte(req.Password), []byte(h.Pass)) == 1
-	if !userOK || !passOK {
-		httpx.Error(w, http.StatusUnauthorized, "bad_credentials", "wrong username or password")
-		return
+	var identity *tenant.Identity
+	var err error
+	if userOK && passOK {
+		identity, err = h.Tenants.EnsureBootstrap(r.Context(), req.Username)
+	} else {
+		account, accountErr := h.Accounts.ByUsername(r.Context(), req.Username)
+		if errors.Is(accountErr, repo.ErrNotFound) {
+			auth.BurnPasswordCheck(req.Password)
+			httpx.Error(w, http.StatusUnauthorized, "bad_credentials", "wrong username or password")
+			return
+		}
+		if accountErr != nil {
+			httpx.Error(w, http.StatusInternalServerError, "internal", accountErr.Error())
+			return
+		}
+		if bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(req.Password)) != nil {
+			httpx.Error(w, http.StatusUnauthorized, "bad_credentials", "wrong username or password")
+			return
+		}
+		identity, err = h.Tenants.IdentityByAccount(r.Context(), account.ID)
+		if errors.Is(err, tenant.ErrNotFound) {
+			httpx.Error(w, http.StatusForbidden, "no_membership", "this account has no console membership")
+			return
+		}
 	}
-	token, err := h.Issuer.IssueAdmin(req.Username)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]string{"token": token})
+	workspaces, err := h.Tenants.Workspaces(r.Context(), identity.ID)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	if len(workspaces) == 0 {
+		httpx.Error(w, http.StatusForbidden, "no_membership", "this account has no console membership")
+		return
+	}
+	token, err := h.Issuer.IssueAdmin(identity.ID, identity.Username)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"token": token, "user": identity, "workspaces": workspaces,
+		"default_workspace_id": workspaces[0].ID,
+	})
 }
 
 // Me handles GET /admin/api/me: who the console is signed in as, when the
@@ -64,9 +107,30 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 // that last one otherwise only ever appears in the startup log.
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	claims := auth.ClaimsFrom(r.Context())
+	identity, err := h.Tenants.IdentityByID(r.Context(), claims.Subject)
+	if err != nil {
+		httpx.Error(w, http.StatusUnauthorized, "invalid_token", "console identity no longer exists")
+		return
+	}
+	workspaces, err := h.Tenants.Workspaces(r.Context(), claims.Subject)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
 	res := map[string]any{
-		"username": claims.Subject,
-		"role":     claims.Role,
+		"username":   identity.Username,
+		"user":       identity,
+		"role":       claims.Role,
+		"workspaces": workspaces,
+	}
+	if selected := r.Header.Get(tenant.WorkspaceHeader); selected != "" {
+		for _, workspace := range workspaces {
+			if workspace.ID == selected {
+				res["active_workspace_id"] = selected
+				res["active_role"] = workspace.Role
+				break
+			}
+		}
 	}
 	if claims.IssuedAt != nil {
 		res["issued_at"] = claims.IssuedAt.Time
@@ -97,7 +161,8 @@ func (h *Handler) CreateGame(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "missing_name", "name is required")
 		return
 	}
-	game, err := h.Games.Create(r.Context(), req.Name)
+	scope := tenant.FromContext(r.Context())
+	game, err := h.Games.CreateForWorkspace(r.Context(), scope.WorkspaceID, req.Name)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
@@ -107,7 +172,8 @@ func (h *Handler) CreateGame(w http.ResponseWriter, r *http.Request) {
 
 // ListGames handles GET /admin/api/games, with online player counts.
 func (h *Handler) ListGames(w http.ResponseWriter, r *http.Request) {
-	games, err := h.Games.List(r.Context())
+	scope := tenant.FromContext(r.Context())
+	games, err := h.Games.ListByWorkspace(r.Context(), scope.WorkspaceID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
@@ -117,6 +183,7 @@ func (h *Handler) ListGames(w http.ResponseWriter, r *http.Request) {
 		Online int `json:"online"`
 	}
 	out := make([]gameWithStats, len(games))
+	redactGameSecrets(games, scope.Role)
 	for i, g := range games {
 		out[i] = gameWithStats{Game: g, Online: h.Hub.OnlineCount(g.ID)}
 	}
@@ -172,7 +239,7 @@ func (h *Handler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 		limit = 50
 	}
 	offset, _ := strconv.Atoi(q.Get("offset"))
-	accounts, err := h.Accounts.List(r.Context(), q.Get("search"), limit, offset)
+	accounts, err := h.Accounts.ListByWorkspace(r.Context(), tenant.FromContext(r.Context()).WorkspaceID, q.Get("search"), limit, offset)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
@@ -183,9 +250,13 @@ func (h *Handler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 // DeleteAccount handles DELETE /admin/api/accounts/{id}. Game players survive
 // and simply lose their link to the passport.
 func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
-	err := h.Accounts.Delete(r.Context(), r.PathValue("id"))
+	err := h.Accounts.DeleteForWorkspace(r.Context(), tenant.FromContext(r.Context()).WorkspaceID, r.PathValue("id"))
 	if errors.Is(err, repo.ErrNotFound) {
 		httpx.Error(w, http.StatusNotFound, "not_found", "no account with this id")
+		return
+	}
+	if errors.Is(err, repo.ErrAccountSharedAcrossWorkspaces) {
+		httpx.Error(w, http.StatusConflict, "account_shared", "account is linked to another workspace and cannot be deleted here")
 		return
 	}
 	if err != nil {
@@ -261,12 +332,32 @@ func (h *Handler) UpdateGameFriendLimit(w http.ResponseWriter, r *http.Request) 
 
 // ListOAuthClients handles GET /admin/api/oauth/clients.
 func (h *Handler) ListOAuthClients(w http.ResponseWriter, r *http.Request) {
-	clients, err := h.OAuthClients.List(r.Context())
+	scope := tenant.FromContext(r.Context())
+	clients, err := h.OAuthClients.ListByWorkspace(r.Context(), scope.WorkspaceID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
+	redactOAuthSecrets(clients, scope.Role)
 	httpx.JSON(w, http.StatusOK, map[string]any{"clients": clients})
+}
+
+func redactGameSecrets(games []repo.Game, role string) {
+	if role != "viewer" {
+		return
+	}
+	for i := range games {
+		games[i].AppSecret = ""
+	}
+}
+
+func redactOAuthSecrets(clients []repo.OAuthClient, role string) {
+	if role != "viewer" {
+		return
+	}
+	for i := range clients {
+		clients[i].ClientSecret = ""
+	}
 }
 
 // CreateOAuthClient handles POST /admin/api/oauth/clients with
@@ -284,7 +375,7 @@ func (h *Handler) CreateOAuthClient(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "missing_name", "name is required")
 		return
 	}
-	client, err := h.OAuthClients.Create(r.Context(), req.Name, req.RedirectURLs, req.Confidential)
+	client, err := h.OAuthClients.CreateForWorkspace(r.Context(), tenant.FromContext(r.Context()).WorkspaceID, req.Name, req.RedirectURLs, req.Confidential)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
@@ -301,7 +392,7 @@ func (h *Handler) UpdateOAuthClient(w http.ResponseWriter, r *http.Request) {
 	if httpx.Decode(w, r, &req) != nil {
 		return
 	}
-	err := h.OAuthClients.Update(r.Context(), r.PathValue("client_id"), req.Name, req.RedirectURLs)
+	err := h.OAuthClients.UpdateForWorkspace(r.Context(), tenant.FromContext(r.Context()).WorkspaceID, r.PathValue("client_id"), req.Name, req.RedirectURLs)
 	if errors.Is(err, repo.ErrNotFound) {
 		httpx.Error(w, http.StatusNotFound, "not_found", "no application with this client_id")
 		return
@@ -315,7 +406,7 @@ func (h *Handler) UpdateOAuthClient(w http.ResponseWriter, r *http.Request) {
 
 // DeleteOAuthClient handles DELETE /admin/api/oauth/clients/{client_id}.
 func (h *Handler) DeleteOAuthClient(w http.ResponseWriter, r *http.Request) {
-	err := h.OAuthClients.Delete(r.Context(), r.PathValue("client_id"))
+	err := h.OAuthClients.DeleteForWorkspace(r.Context(), tenant.FromContext(r.Context()).WorkspaceID, r.PathValue("client_id"))
 	if errors.Is(err, repo.ErrNotFound) {
 		httpx.Error(w, http.StatusNotFound, "not_found", "no application with this client_id")
 		return

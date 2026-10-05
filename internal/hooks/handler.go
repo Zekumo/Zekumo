@@ -10,6 +10,7 @@ import (
 
 	"zekumo/internal/httpx"
 	"zekumo/internal/repo"
+	"zekumo/internal/tenant"
 )
 
 // KnownEvents is documentation for the console; hooks may subscribe to any
@@ -35,7 +36,19 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
+	if scope := tenant.FromContext(r.Context()); scope != nil {
+		redactWebhookSecrets(hooks, scope.Role)
+	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"webhooks": hooks, "known_events": KnownEvents})
+}
+
+func redactWebhookSecrets(hooks []repo.Webhook, role string) {
+	if role != "viewer" {
+		return
+	}
+	for i := range hooks {
+		hooks[i].Secret = ""
+	}
 }
 
 // Create handles POST /admin/api/games/{id}/webhooks with {url, events}.

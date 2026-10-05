@@ -13,6 +13,10 @@ func phaseLimits(s *state) {
 	step("register account for lockout test", call("POST", "/sso/api/register", "",
 		map[string]string{"username": "lock_" + lockSuffix, "password": "hunter44"}, &locker))
 	s.accountIDs = append(s.accountIDs, locker.Account.ID)
+	// Link the account to this workspace's game so the tenant owner can clean
+	// up the fixture without gaining access to unrelated platform accounts.
+	step("link lockout account to game", call("POST", "/v1/auth/login", "",
+		map[string]string{"app_id": s.appID, "provider": "sso", "username": "lock_" + lockSuffix, "password": "hunter44"}, nil))
 	for range 12 {
 		err := call("POST", "/sso/api/login", "",
 			map[string]string{"username": "lock_" + lockSuffix, "password": "wrong-one"}, nil)

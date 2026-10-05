@@ -6,6 +6,7 @@ const LOG_SOURCES = ['http', 'funcs', 'hooks', 'client'];
 const logFilter = { level: '', source: '', q: '', scope: 'game', beforeId: 0, rows: [] };
 
 async function renderLogs(host) {
+  const ctx = operationContext();
   // Reachable both platform-wide and inside a game; with no game selected the
   // scope switch has nothing to switch between.
   const perGame = !!state.gameId;
@@ -17,6 +18,7 @@ async function renderLogs(host) {
   if (logFilter.source) q.set('source', logFilter.source);
   if (logFilter.q) q.set('q', logFilter.q);
   const { entries } = await api('GET', '/admin/api/logs?' + q);
+  if (!contextCurrent(ctx)) return;
   logFilter.rows = entries;
   logFilter.beforeId = entries.length ? entries[entries.length - 1].id : 0;
 
@@ -84,12 +86,14 @@ function setLog(key, value) {
 }
 
 async function loadMoreLogs() {
+  const ctx = operationContext();
   const q = new URLSearchParams({ limit: 50, before_id: logFilter.beforeId });
   if (state.gameId && logFilter.scope === 'game') q.set('game_id', state.gameId);
   if (logFilter.level) q.set('level', logFilter.level);
   if (logFilter.source) q.set('source', logFilter.source);
   if (logFilter.q) q.set('q', logFilter.q);
   const { entries } = await api('GET', '/admin/api/logs?' + q);
+  if (!contextCurrent(ctx)) return;
   if (!entries.length) return toast('没有更早的日志了');
   logFilter.beforeId = entries[entries.length - 1].id;
   document.getElementById('logRows').insertAdjacentHTML('beforeend', entries.map(logRow).join(''));

@@ -3,6 +3,7 @@
 
 async function renderOverview(host) {
   const id = state.gameId;
+  const game = state.game;
   const [stats, logs, releases, retention, funnel] = await Promise.all([
     api('GET', `/admin/api/games/${id}/stats?days=30`),
     api('GET', `/admin/api/logs?game_id=${id}&level=error&limit=5`),
@@ -18,8 +19,8 @@ async function renderOverview(host) {
   const latest = published[0];
 
   pageShell(host, {
-    title: state.game.name,
-    subtitle: `App ID ${esc(state.game.app_id)} · 创建于 ${fmtTime(state.game.created_at)}`,
+    title: game.name,
+    subtitle: `App ID ${esc(game.app_id)} · 创建于 ${fmtTime(game.created_at)}`,
     actions: `<button class="btn text" onclick="route()">刷新</button>`,
     body: `
       <div class="tiles">

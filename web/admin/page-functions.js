@@ -18,7 +18,7 @@ async function renderFunctions(host) {
   pageShell(host, {
     title: '云函数',
     subtitle: '服务端 JS(goja 沙箱,10 秒上限)。全局有 request 与 mc.kv / mc.playerdata / mc.players / mc.leaderboard / mc.http。',
-    actions: `<button class="btn filled" onclick="newFnDialog()">新建函数</button>`,
+    actions: `<button class="btn filled" data-write onclick="newFnDialog()">新建函数</button>`,
     body: functions.length ? `
       <div class="master-detail">
         <div class="card list-card">
@@ -44,8 +44,10 @@ async function renderFunctions(host) {
 }
 
 async function openFn(name) {
+  const ctx = operationContext();
   window.__fn = name;
-  const f = await api('GET', `/admin/api/games/${state.gameId}/functions/${encodeURIComponent(name)}`);
+  const f = await api('GET', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}`);
+  if (!contextCurrent(ctx) || window.__fn !== name) return;
   const host = document.getElementById('fnDetail');
   if (!host) return;
   host.innerHTML = `
@@ -64,15 +66,16 @@ async function openFn(name) {
       <textarea id="fnCode" placeholder=" " style="min-height:300px">${esc(f.code)}</textarea>
       <span class="label">函数代码</span></label>
     <div class="row" style="margin-top:16px">
-      <button class="btn filled" onclick="saveFn('${esc(f.name)}')">保存</button>
-      <button class="btn outlined" onclick="testFn('${esc(f.name)}')">测试运行</button>
-      <button class="btn text danger" onclick="deleteFn('${esc(f.name)}')">删除</button>
+      <button class="btn filled" data-write onclick="saveFn('${esc(f.name)}')">保存</button>
+      <button class="btn outlined" data-write onclick="testFn('${esc(f.name)}')">测试运行</button>
+      <button class="btn text danger" data-write onclick="deleteFn('${esc(f.name)}')">删除</button>
     </div>
     <div id="fnOut"></div>
     <p class="dim" style="margin-top:20px">
       调用地址:<code>POST /v1/functions/${esc(f.name)}</code>${f.public
         ? `,或免登录 <code>POST /v1/apps/${esc(state.game.app_id)}/functions/${esc(f.name)}</code>` : ''}
     </p>`;
+  applySurfaceAccess(host);
 }
 
 function fnPayload() {
@@ -93,12 +96,15 @@ async function saveFn(name) {
 }
 
 async function testFn(name) {
+  const ctx = operationContext();
   const out = document.getElementById('fnOut');
   out.innerHTML = `<div class="dim" style="margin-top:16px">运行中…</div>`;
   try {
     // Save first so the run reflects what is on screen.
-    await api('PUT', `/admin/api/games/${state.gameId}/functions/${encodeURIComponent(name)}`, fnPayload());
-    const res = await api('POST', `/admin/api/games/${state.gameId}/functions/${encodeURIComponent(name)}/test`, {});
+    await api('PUT', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}`, fnPayload());
+    requireCurrentContext(ctx);
+    const res = await api('POST', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}/test`, {});
+    requireCurrentContext(ctx);
     out.innerHTML = `
       <div class="run-result ok">
         <div class="run-head">返回值</div>
@@ -111,6 +117,7 @@ async function testFn(name) {
 }
 
 function newFnDialog() {
+  const ctx = operationContext();
   openDialog({
     title: '新建云函数',
     body: dlgField('nfName', '函数名(字母、数字、- 和 _)') +
@@ -119,8 +126,10 @@ function newFnDialog() {
     onConfirm: async () => {
       const name = dlgVal('nfName');
       if (!name) throw new Error('请输入函数名');
-      await api('PUT', `/admin/api/games/${state.gameId}/functions/${encodeURIComponent(name)}`,
+      requireCurrentContext(ctx);
+      await api('PUT', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}`,
         { code: SAMPLE_FN, enabled: true, public: false, cron_secs: 0 });
+      requireCurrentContext(ctx);
       window.__fn = name;
       toast('已创建');
       await route();
