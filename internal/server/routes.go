@@ -262,9 +262,12 @@ func registerPages(rt router) {
 		log.Fatalf("embed: %v", err)
 	}
 	rt.Handle("GET /admin/", http.StripPrefix("/admin/", http.FileServer(http.FS(consoleFS))))
-	rt.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/admin/", http.StatusFound)
-	})
+	rt.HandleFunc("GET /{$}", staticPage("site/index.html"))
+	siteFS, err := fs.Sub(web.FS, "site")
+	if err != nil {
+		log.Fatalf("embed site: %v", err)
+	}
+	rt.Handle("GET /site/", http.StripPrefix("/site/", http.FileServer(http.FS(siteFS))))
 
 	// Hosted pages games redirect players to.
 	rt.HandleFunc("GET /sso/authorize", staticPage("sso/index.html"))

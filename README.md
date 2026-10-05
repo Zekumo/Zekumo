@@ -41,7 +41,7 @@ $env:ZEKUMO_WS  = "ws://localhost:8090"
 go run ./cmd/smoketest
 ```
 
-打开 <http://localhost:8090/admin/>,默认账号 `admin` / `admin123`,
+打开 <http://localhost:8090/> 查看官网，进入 <http://localhost:8090/admin/> 使用控制台，默认账号 `admin` / `admin123`,
 创建游戏后拿到 `app_id`,客户端就可以登录了。
 
 ### 服务器部署(Docker Compose)
