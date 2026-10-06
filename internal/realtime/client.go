@@ -3,16 +3,19 @@ package realtime
 import (
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 const (
-	writeWait      = 10 * time.Second
-	pongWait       = 60 * time.Second
-	pingPeriod     = 30 * time.Second
-	maxMessageSize = 64 << 10 // 64KB per frame
+	writeWait            = 10 * time.Second
+	pongWait             = 60 * time.Second
+	pingPeriod           = 30 * time.Second
+	maxClientQueuedBytes = 4 << 20
+	maxHubQueuedBytes    = 64 << 20
+	maxMessageSize       = 64 << 10 // 64KB per frame
 )
 
 type Client struct {
@@ -24,26 +27,74 @@ type Client struct {
 	gameID   string
 	nickname string
 
+	// rate fields are protected by hub.mu.
+	rateAt time.Time
+	tokens float64
+
 	room *Room
 	subs map[string]struct{}
 
-	sendMu sync.Mutex
-	closed bool
+	queuedBytes atomic.Int64
+	sendMu      sync.Mutex
+	closed      bool
 }
 
-// enqueue queues a message; a client that cannot drain 256 messages is dropped.
+// allowMessage bounds per-connection fanout work (60/s with a 120-message burst).
+// Caller holds hub.mu; protocol ping messages share the budget.
+func (c *Client) allowMessage(now time.Time) bool {
+	if c.rateAt.IsZero() {
+		c.rateAt = now
+		c.tokens = 120
+	}
+	elapsed := now.Sub(c.rateAt).Seconds()
+	if elapsed > 0 {
+		c.tokens += elapsed * 60
+		c.rateAt = now
+	}
+	if c.tokens > 120 {
+		c.tokens = 120
+	}
+	if c.tokens < 1 {
+		return false
+	}
+	c.tokens--
+	return true
+}
+
+// enqueue bounds queued messages and queued + in-flight bytes, dropping slow clients.
 func (c *Client) enqueue(payload []byte) {
 	c.sendMu.Lock()
 	if c.closed {
 		c.sendMu.Unlock()
 		return
 	}
+	n := int64(len(payload))
+	local := c.queuedBytes.Add(n)
+	global := int64(0)
+	if c.hub != nil {
+		global = c.hub.queuedBytes.Add(n)
+	}
+	if local > maxClientQueuedBytes || global > maxHubQueuedBytes {
+		c.releaseQueued(payload)
+		c.sendMu.Unlock()
+		c.close(websocket.CloseGoingAway, "send byte budget exceeded")
+		return
+	}
 	select {
 	case c.send <- payload:
 		c.sendMu.Unlock()
 	default:
+		c.releaseQueued(payload)
 		c.sendMu.Unlock()
 		c.close(websocket.CloseGoingAway, "send buffer overflow")
+	}
+}
+
+func (c *Client) releaseQueued(payload []byte) {
+	n := int64(len(payload))
+	c.queuedBytes.Add(-n)
+	if c.hub != nil {
+		c.hub.queuedBytes.Add(-n)
 	}
 }
 
@@ -51,8 +102,8 @@ func (c *Client) sendError(code, message string) {
 	c.enqueue(msg("error", map[string]string{"code": code, "message": message}))
 }
 
-// close detaches the client immediately and tears the socket down in the
-// background. The teardown must not run inline: callers may hold the hub
+// close stops enqueueing and discards queued messages immediately. Socket teardown
+// runs in the background; readPump then detaches membership. Teardown must not run inline: callers may hold the hub
 // mutex, and WriteControl blocks for up to writeWait on a stalled peer —
 // which is exactly the peer that triggers a close in the first place.
 func (c *Client) close(code int, reason string) {
@@ -63,8 +114,14 @@ func (c *Client) close(code int, reason string) {
 	}
 	c.closed = true
 	close(c.send)
+	for payload := range c.send {
+		c.releaseQueued(payload)
+	}
 	c.sendMu.Unlock()
 
+	if c.conn == nil {
+		return
+	}
 	go func() {
 		_ = c.conn.WriteControl(websocket.CloseMessage,
 			websocket.FormatCloseMessage(code, reason), time.Now().Add(writeWait))
@@ -103,7 +160,9 @@ func (c *Client) writePump() {
 				return
 			}
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+			err := c.conn.WriteMessage(websocket.TextMessage, payload)
+			c.releaseQueued(payload) // Include in-flight writes in the byte budget.
+			if err != nil {
 				c.close(websocket.CloseAbnormalClosure, "write failed")
 				return
 			}

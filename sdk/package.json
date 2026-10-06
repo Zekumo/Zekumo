@@ -40,8 +40,10 @@
   ],
   "sideEffects": false,
   "scripts": {
+    "demo": "npm run build && node examples/star-catcher/serve.mjs",
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "npm run build && node --test rooms.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.5.0"

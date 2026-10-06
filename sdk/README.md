@@ -63,3 +63,44 @@ Errors are thrown as `ZekumoError { status, code, message }`.
 ```bash
 npm install && npm run build
 ```
+
+## Playable SDK example
+
+Run `npm run demo` from `sdk/`, then open <http://127.0.0.1:5178/>.
+[云间拾星 / Star Catcher](examples/star-catcher/README.md) is a Canvas game using
+the actual SDK for guest login, cloud saves, and leaderboards. Its connection
+settings are editable in the game; no app secret or admin credentials are needed.
+
+## Room lobby and owner controls
+
+```ts
+await mc.realtime.connect();
+const { rooms, total } = await mc.realtime.listRoomsPage({ offset: 0, limit: 20 });
+const room = await mc.realtime.createRoom({ name: "Co-op", maxPlayers: 8 });
+await mc.realtime.updateRoom({ locked: true });
+const current = await mc.realtime.getRoom();
+// Owner-only actions; target must already be a member of this room:
+// await mc.realtime.kickRoomMember(playerId);
+// await mc.realtime.transferRoom(playerId);
+mc.realtime.on("room.updated", snapshot => console.log(snapshot));
+mc.realtime.on("room.kicked", ({ reason }) => console.log(reason));
+mc.realtime.on("room.owner_changed", ({ owner_id }) => console.log(owner_id));
+```
+
+`listRooms()` now returns lobby summaries, not full member snapshots. Use
+`listRoomsPage()` for `total`, `offset`, and `limit`; pages default to 20 and are
+capped at 50. Only room members can call `getRoom()` to obtain member state.
+Await each realtime request before issuing another: the wire protocol does not
+have request IDs. Room update events are also broadcast to members.
+
+Room names are limited to 128 UTF-8 bytes, metadata to 8 KiB, and each player
+state/message to 16 KiB. Capacity is 1–200 (default 20); an owner cannot shrink
+below the current membership. Omitted update fields stay unchanged; `meta: null`
+clears metadata. Locked rooms reject new joins. Kicking does not ban an account;
+use game moderation separately when appropriate.
+
+Rooms and their state are process-local and ephemeral. Reconnect does not
+restore room membership automatically. This is lightweight room synchronization,
+not a persistent MMO world or an authoritative simulation. The admin console's
+实时房间 page shows a manually refreshed, tenant-scoped snapshot of room counts,
+connections, occupancy, and locks without player state or room metadata.

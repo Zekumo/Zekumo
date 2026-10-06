@@ -97,7 +97,8 @@ func (c *Client) Realtime() *Realtime {
 //
 // Event types the server sends: welcome, pong, room.created, room.joined,
 // room.left, room.list, room.member_joined, room.member_left, room.state,
-// room.msg, chat.subbed, chat.unsubbed, chat.msg, error.
+// room.msg, room.info, room.updated, room.kicked, room.kick_ok,
+// room.owner_changed, room.transferred, chat.subbed, chat.unsubbed, chat.msg, error.
 //
 // Handlers run on the read goroutine, so a slow handler stalls the stream —
 // hand long work to a goroutine or a channel the game loop drains.
@@ -338,7 +339,7 @@ func (r *Realtime) JoinRoom(roomID string) error {
 // LeaveRoom leaves the current room.
 func (r *Realtime) LeaveRoom() error { return r.Send("room.leave", nil) }
 
-// ListRooms asks for the open rooms; the answer arrives as "room.list".
+// ListRooms asks for the first 20 lobby summaries; the answer arrives as "room.list".
 func (r *Realtime) ListRooms() error { return r.Send("room.list", nil) }
 
 // SyncState publishes this player's state to the room — position, animation,
@@ -386,4 +387,61 @@ func mustJSON(v any) json.RawMessage {
 		return nil // an unmarshalable payload is a programming error, not a wire condition
 	}
 	return raw
+}
+
+// RoomSummary is public lobby metadata, without member identities or state.
+type RoomSummary struct {
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	OwnerID     string          `json:"owner_id"`
+	MaxPlayers  int             `json:"max_players"`
+	Locked      bool            `json:"locked"`
+	MemberCount int             `json:"member_count"`
+	Meta        json.RawMessage `json:"meta,omitempty"`
+}
+
+// RoomPage is the response to room.list. Pages default to 20, capped at 50.
+type RoomPage struct {
+	Rooms  []RoomSummary `json:"rooms"`
+	Total  int           `json:"total"`
+	Offset int           `json:"offset"`
+	Limit  int           `json:"limit"`
+}
+
+// RoomSnapshot is visible only to current room members.
+type RoomSnapshot = Room
+
+// RoomUpdate omits nil fields. Set Meta to json.RawMessage("null") to clear it.
+// Name is limited to 128 UTF-8 bytes, Meta to 8 KiB and capacity to 1–200.
+type RoomUpdate struct {
+	Name       *string         `json:"name,omitempty"`
+	MaxPlayers *int            `json:"max_players,omitempty"`
+	Locked     *bool           `json:"locked,omitempty"`
+	Meta       json.RawMessage `json:"meta,omitempty"`
+}
+
+// ListRoomsPage requests lobby summaries. Listen for room.list for the result.
+func (r *Realtime) ListRoomsPage(offset, limit int) error {
+	return r.Send("room.list", map[string]int{"offset": offset, "limit": limit})
+}
+
+// GetRoom requests the current membership snapshot, delivered as room.info.
+func (r *Realtime) GetRoom() error { return r.Send("room.get", nil) }
+
+// UpdateRoom is owner-only; a successful snapshot is broadcast as room.updated.
+func (r *Realtime) UpdateRoom(update RoomUpdate) error { return r.Send("room.update", update) }
+
+// KickRoomMember removes a current member. Success arrives as room.kick_ok.
+func (r *Realtime) KickRoomMember(playerID string) error {
+	return r.Send("room.kick", map[string]string{"player_id": playerID})
+}
+
+// TransferRoom gives ownership to a current member; success is room.transferred.
+func (r *Realtime) TransferRoom(playerID string) error {
+	return r.Send("room.transfer", map[string]string{"player_id": playerID})
+}
+
+// CreateRoomWithOptions supports locked rooms without changing CreateRoom callers.
+func (r *Realtime) CreateRoomWithOptions(name string, maxPlayers int, meta any, locked bool) error {
+	return r.Send("room.create", map[string]any{"name": name, "max_players": maxPlayers, "meta": meta, "locked": locked})
 }

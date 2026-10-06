@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>云间拾星 · Zekumo</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='52'%3E☁%3C/text%3E%3C/svg%3E"><link rel="stylesheet" href="./style.css"></head>
+<body>
+<header><a class="brand" href="./">☁ <span>ZEKUMO <small>PLAYGROUND</small></span></a><span class="pill" id="connection">正在连接云端…</span></header>
+<main>
+  <section class="intro"><div class="eyebrow">A LITTLE BREAK ABOVE THE CLOUDS</div><h1>云间拾星<span>Star Catcher</span></h1><p>借一朵云，收集今天的星光。</p></section>
+  <div class="layout">
+    <section class="game-card">
+      <div class="hud"><div><span>本局星光</span><strong id="score">0</strong></div><div><span>剩余时间</span><strong id="time">45<small>s</small></strong></div><div><span>云朵能量</span><strong id="lives" class="hearts">♥ ♥ ♥</strong></div><button id="pause" class="icon-button" aria-label="暂停游戏" disabled>Ⅱ</button></div>
+      <div class="stage"><canvas id="game" width="800" height="560" tabindex="0" aria-label="拾星游戏，方向键或 A D 移动，空格暂停，也可以拖动云朵"></canvas><div class="overlay" id="overlay"><div class="cloud-icon">☁</div><div class="eyebrow" id="overlay-label">45 SECONDS OF STARDUST</div><h2 id="overlay-title">星光正好，出发吧</h2><p id="overlay-copy">接住星星 +10 分，躲开紫色陨石。<br>连续接住星星，还能获得连击加分。</p><button class="primary" id="start" disabled>正在连接…</button></div><div id="combo" aria-live="polite"></div></div>
+      <div class="controls"><span><kbd>←</kbd> <kbd>→</kbd> / <kbd>A</kbd> <kbd>D</kbd> 移动</span><span><kbd>空格</kbd> 暂停 · 手机拖动云朵</span></div>
+    </section>
+    <aside>
+      <section class="panel profile"><div class="eyebrow">YOUR LITTLE JOURNEY</div><h2>拾星手记 <span>✧</span></h2><div class="stats"><div><strong id="best">0</strong><span>最高星光</span></div><div><strong id="rounds">0</strong><span>完成旅程</span></div></div><p id="save-status" role="status">正在读取云端手记…</p></section>
+      <section class="panel leaderboard"><div class="panel-title"><h2>云端星光榜</h2><button id="refresh" class="text-button">刷新 ↻</button></div><p class="muted">同一片天空，一起收集星光</p><ol id="board"><li class="empty">等待连接 Zekumo</li></ol></section>
+      <details class="panel settings"><summary>☁ Zekumo 连接设置</summary><form id="settings"><label>API 地址<input id="api" type="url" required value="https://api.zekumo.com"></label><label>App ID<input id="app-id" required value="zk_9c49b160c312"></label><label>你的昵称<input id="nickname" maxlength="24" value="拾星旅人" required></label><button class="secondary" id="connect">连接并保存</button></form><p class="muted" id="player">游客身份保存在当前浏览器。</p></details>
+    </aside>
+  </div>
+</main><footer><span>MADE OF CLOUDS & A LITTLE CURIOSITY</span><span>Powered by Zekumo SDK · 游客登录 / 云存档 / 排行榜</span></footer>
+<script type="module" src="./game.js"></script>
+</body></html>

@@ -303,6 +303,7 @@ type Member struct {
 
 // Room is the shared state of one realtime room.
 type Room struct {
+	Locked     bool            `json:"locked"`
 	ID         string          `json:"id"`
 	Name       string          `json:"name"`
 	OwnerID    string          `json:"owner_id"`

@@ -228,3 +228,22 @@ GOOS=windows GOARCH=amd64 go build ./...
 GOOS=darwin  GOARCH=arm64 go build ./...
 GOOS=linux   GOARCH=amd64 go build ./...
 ```
+
+## Room management
+
+Register handlers before sending commands. `ListRoomsPage(offset, limit)` returns
+`room.list` with a `RoomPage` of public `RoomSummary` values. `ListRooms()` requests
+the first 20 rooms (maximum page size 50). Lobby results exclude member state.
+`GetRoom()` returns the current member-only `Room` as `room.info`.
+
+Owners can call `UpdateRoom(RoomUpdate{...})`, `KickRoomMember(playerID)`, and
+`TransferRoom(playerID)`. Success events are `room.updated`, `room.kick_ok`, and
+`room.transferred`; server failures arrive as `error`. Omitted fields stay
+unchanged; `Meta: json.RawMessage("null")` clears metadata.
+`CreateRoomWithOptions(name, capacity, meta, locked)` can create a locked room.
+
+Rooms are process-local and ephemeral, with 1–200 members (default 20), names
+up to 128 UTF-8 bytes, metadata up to 8 KiB, and state/messages up to 16 KiB.
+Reconnect does not restore membership automatically. Locking prevents new joins;
+kicking is not a persistent ban. This is lightweight room synchronization,
+not a persistent MMO world or an authoritative simulation.

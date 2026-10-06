@@ -194,12 +194,37 @@ export interface KVEntry {
   value: Json;
 }
 
+export interface RoomSummary {
+  id: string;
+  name: string;
+  owner_id: string;
+  max_players: number;
+  locked: boolean;
+  member_count: number;
+  meta?: Json;
+}
+
+export interface RoomPage {
+  rooms: RoomSummary[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface RoomOptions {
+  name?: string;
+  maxPlayers?: number;
+  meta?: Json;
+  locked?: boolean;
+}
+
 export interface Room {
   id: string;
   name: string;
   owner_id: string;
   max_players: number;
   meta?: Json;
+  locked: boolean;
   members: Array<{ player_id: string; nickname: string; state?: Json }>;
 }
 
@@ -614,7 +639,13 @@ export interface RealtimeEventData {
   "room.created": Room;
   "room.joined": Room;
   "room.left": Record<string, never>;
-  "room.list": { rooms: Room[] };
+  "room.list": RoomPage;
+  "room.updated": Room;
+  "room.info": Room;
+  "room.transferred": Room;
+  "room.kick_ok": { player_id: string; room_id: string };
+  "room.kicked": { room_id: string; reason: string };
+  "room.owner_changed": { owner_id: string };
   "room.member_joined": { player_id: string; nickname: string };
   "room.member_left": { player_id: string; new_owner: string };
   "room.state": { player_id: string; state: Json };
@@ -812,8 +843,8 @@ export class RealtimeClient {
     });
   }
 
-  createRoom(opts: { name?: string; maxPlayers?: number; meta?: Json } = {}): Promise<Room> {
-    return this.request("room.create", { name: opts.name, max_players: opts.maxPlayers, meta: opts.meta }, "room.created");
+  createRoom(opts: RoomOptions = {}): Promise<Room> {
+    return this.request("room.create", { name: opts.name, max_players: opts.maxPlayers, meta: opts.meta, locked: opts.locked }, "room.created");
   }
 
   joinRoom(roomId: string): Promise<Room> {
@@ -824,8 +855,31 @@ export class RealtimeClient {
     return this.request("room.leave", {}, "room.left").then(() => undefined);
   }
 
-  listRooms(): Promise<Room[]> {
-    return this.request<{ rooms: Room[] }>("room.list", {}, "room.list").then((r) => r.rooms);
+  /** Lobby summaries exclude private member state; defaults to the first 20 rooms. */
+  listRooms(opts: { offset?: number; limit?: number } = {}): Promise<RoomSummary[]> {
+    return this.listRoomsPage(opts).then((r) => r.rooms);
+  }
+
+  listRoomsPage(opts: { offset?: number; limit?: number } = {}): Promise<RoomPage> {
+    return this.request("room.list", opts, "room.list");
+  }
+
+  /** Full snapshot of the room this player currently belongs to. */
+  getRoom(): Promise<Room> {
+    return this.request("room.get", {}, "room.info");
+  }
+
+  /** Owner only. Omitted fields stay unchanged; meta: null clears metadata. */
+  updateRoom(opts: RoomOptions): Promise<Room> {
+    return this.request("room.update", { name: opts.name, max_players: opts.maxPlayers, meta: opts.meta, locked: opts.locked }, "room.updated");
+  }
+
+  kickRoomMember(playerId: string): Promise<void> {
+    return this.request("room.kick", { player_id: playerId }, "room.kick_ok").then(() => undefined);
+  }
+
+  transferRoom(playerId: string): Promise<Room> {
+    return this.request("room.transfer", { player_id: playerId }, "room.transferred");
   }
 
   /** Broadcast this player's state blob to everyone in the room. */

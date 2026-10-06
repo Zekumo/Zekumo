@@ -70,9 +70,16 @@ jobs:
         working-directory: sdk-go
         run: go test ./...
 
+      - name: Realtime race tests
+        run: go test -race ./internal/realtime
+
+      - name: Build TypeScript SDK
+        working-directory: sdk
+        run: npm install --ignore-scripts --package-lock=false && npm run build && node --test rooms.test.mjs
+
       - name: Console tests and syntax
         run: |
-          node --test web/admin/tenant-console.test.mjs
+          node --test web/admin/*.test.mjs
           for file in web/admin/*.js; do node --check "$file"; done
 
       - name: Start Zekumo

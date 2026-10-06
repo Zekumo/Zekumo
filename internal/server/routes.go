@@ -174,6 +174,7 @@ func registerAdmin(rt router) {
 	ta("POST /admin/api/games", "admin", tenant.ResourceNone, d.adminH.CreateGame)
 	ta("DELETE /admin/api/games/{id}", "owner", tenant.ResourceGame, d.adminH.DeleteGame)
 	ta("GET /admin/api/games/{id}/players", "viewer", tenant.ResourceGame, d.adminH.ListPlayers)
+	ta("GET /admin/api/games/{id}/rooms", "viewer", tenant.ResourceGame, d.hub.AdminRooms)
 	ta("GET /admin/api/players/{pid}/data", "viewer", tenant.ResourcePlayer, d.adminH.PlayerData)
 	ta("GET /admin/api/accounts", "viewer", tenant.ResourceNone, d.adminH.ListAccounts)
 	ta("DELETE /admin/api/accounts/{id}", "owner", tenant.ResourceAccount, d.adminH.DeleteAccount)

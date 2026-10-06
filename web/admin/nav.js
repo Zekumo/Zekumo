@@ -14,6 +14,7 @@ const ROUTES = {
   members:   { title: '成员与权限', scopes: ['platform'], render: h => renderWorkspace(h) },
 
   overview:  { title: '概览',       scopes: ['game'], render: h => renderOverview(h) },
+  rooms:     { title: '实时房间', scopes: ['game'], render: h => renderRooms(h) },
   players:   { title: '玩家',       scopes: ['game'], render: h => renderPlayers(h) },
   boards:    { title: '排行榜',     scopes: ['game'], render: h => renderBoards(h) },
   content:   { title: '剧情对话',   scopes: ['game'], render: h => renderContent(h) },
@@ -41,6 +42,7 @@ const NAV_PLATFORM = [
 ];
 
 const NAV_GAME = [
+  ['rooms', 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 2h4v4H7V7Zm6 0h4v4h-4V7Zm-6 6h10v4H7v-4Z'],
   ['overview', 'M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z'],
   ['players', 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4 0-9 2-9 5v3h18v-3c0-3-5-5-9-5Z'],
   ['boards', 'M4 20h4v-8H4v8Zm6 0h4V4h-4v16Zm6 0h4v-5h-4v5Z'],
