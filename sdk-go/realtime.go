@@ -33,6 +33,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"sync"
@@ -79,9 +80,17 @@ type Realtime struct {
 	writeMu  sync.Mutex // gorilla permits only one concurrent data writer
 	mu       sync.Mutex
 	conn     *websocket.Conn
+	session  *realtimeSession // owns dialing, reads and retries until canceled
 	handlers map[string][]Handler
 	closed   bool  // Close was called: stop reconnecting
 	err      error // why the connection ended, for Err
+}
+
+// A session reserves the client before dialing. Its identity prevents an old
+// reader or cancellation callback from changing a later connection.
+type realtimeSession struct {
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // Realtime returns a realtime client for this session. Call it after logging
@@ -130,20 +139,86 @@ func (r *Realtime) wsURL() (string, error) {
 }
 
 // Connect establishes the connection and keeps it alive until Close or ctx
-// ends. It returns once the handshake succeeds, so a caller may send
+// ends. Only one Connect may be active at a time; overlapping calls return an
+// error. After context cancellation, Connect may start a new session. Close
+// permanently closes the client. Connect returns once the handshake succeeds,
+// so a caller may send
 // immediately; register a "welcome" handler before calling it to catch the
 // server's greeting, which also fires again after every reconnect.
 func (r *Realtime) Connect(ctx context.Context) error {
-	conn, err := r.dial(ctx)
-	if err != nil {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	r.mu.Lock()
-	r.conn = conn
+	if r.closed {
+		r.mu.Unlock()
+		return errors.New("zekumo: realtime client is closed")
+	}
+	var old *websocket.Conn
+	if r.session != nil {
+		if r.session.ctx.Err() == nil {
+			r.mu.Unlock()
+			return errors.New("zekumo: realtime client is already connecting or connected")
+		}
+		old, r.conn = r.conn, nil
+		r.session.cancel()
+	}
+	sessionCtx, cancel := context.WithCancel(ctx)
+	session := &realtimeSession{ctx: sessionCtx, cancel: cancel}
+	r.session = session
 	r.mu.Unlock()
-
-	go r.run(ctx, conn) // read until the socket dies, then reconnect
+	if old != nil {
+		_ = old.Close()
+	}
+	// Closing the owned socket interrupts a silent ReadMessage immediately.
+	context.AfterFunc(sessionCtx, func() { r.finish(session, nil) })
+	conn, err := r.dial(sessionCtx)
+	if err != nil {
+		r.finish(session, nil)
+		return err
+	}
+	if !r.install(session, conn) {
+		_ = conn.Close()
+		if err := sessionCtx.Err(); err != nil {
+			return err
+		}
+		return errors.New("zekumo: realtime connection stopped before handshake completed")
+	}
+	go r.run(session, conn)
 	return nil
+}
+
+// install only publishes sockets belonging to the current, live session.
+func (r *Realtime) install(session *realtimeSession, conn *websocket.Conn) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.session != session || r.closed || session.ctx.Err() != nil {
+		return false
+	}
+	r.conn = conn
+	return true
+}
+
+// finish detaches before closing: callbacks from this session can never close
+// or clear a socket installed by a later Connect.
+func (r *Realtime) finish(session *realtimeSession, err error) bool {
+	r.mu.Lock()
+	if r.session != session {
+		r.mu.Unlock()
+		return false
+	}
+	conn := r.conn
+	active := session.ctx.Err() == nil
+	r.conn, r.session = nil, nil
+	if err != nil && active {
+		r.err, r.closed = err, true
+	}
+	r.mu.Unlock()
+	session.cancel()
+	if conn != nil {
+		_ = conn.Close()
+	}
+	return active
 }
 
 // dial opens one connection. The handshake succeeding is what makes the
@@ -159,7 +234,43 @@ func (r *Realtime) dial(ctx context.Context) (*websocket.Conn, error) {
 	if dialer == nil {
 		dialer = websocket.DefaultDialer
 	}
-	conn, res, err := dialer.DialContext(ctx, endpoint, nil)
+	// Gorilla's DialContext applies deadlines to the HTTP upgrade but does
+	// not interrupt its response read for a context canceled without a deadline.
+	// Wrap a copy, preserving custom transport/TLS hooks, to close that socket.
+	ownedDialer := *dialer
+	var stop func() bool
+	watch := func(dial func(context.Context, string, string) (net.Conn, error)) func(context.Context, string, string) (net.Conn, error) {
+		return func(dialCtx context.Context, network, addr string) (net.Conn, error) {
+			conn, err := dial(dialCtx, network, addr)
+			if err == nil {
+				stop = context.AfterFunc(ctx, func() { _ = conn.Close() })
+			}
+			return conn, err
+		}
+	}
+	netDial := ownedDialer.NetDialContext
+	if netDial == nil {
+		if ownedDialer.NetDial != nil {
+			legacyDial := ownedDialer.NetDial
+			netDial = func(_ context.Context, network, addr string) (net.Conn, error) { return legacyDial(network, addr) }
+		} else {
+			netDial = (&net.Dialer{}).DialContext
+		}
+	}
+	ownedDialer.NetDialContext = watch(netDial)
+	if ownedDialer.NetDialTLSContext != nil {
+		ownedDialer.NetDialTLSContext = watch(ownedDialer.NetDialTLSContext)
+	}
+	conn, res, err := ownedDialer.DialContext(ctx, endpoint, nil)
+	if stop != nil {
+		stop()
+	}
+	if ctx.Err() != nil {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		return nil, ctx.Err()
+	}
 	if err != nil {
 		// A rejected handshake carries the reason as HTTP status; surfacing it
 		// distinguishes an expired token from an unreachable server.
@@ -175,49 +286,57 @@ func (r *Realtime) dial(ctx context.Context) (*websocket.Conn, error) {
 // run reads frames until the connection breaks, then reconnects unless told
 // to stop. Reconnect also replays nothing: rooms are server state, so a game
 // rejoins in its "welcome" handler.
-func (r *Realtime) run(ctx context.Context, conn *websocket.Conn) {
-	backoff := rtBackoffMin
+func (r *Realtime) run(session *realtimeSession, conn *websocket.Conn) {
+	defer r.finish(session, nil)
 	for {
-		err := r.readLoop(conn)
-
+		err := r.readLoop(session, conn)
 		r.mu.Lock()
-		stop := r.closed
-		r.mu.Unlock()
-		if stop || ctx.Err() != nil {
-			return // Close or a cancelled context: an intentional end, not a failure
+		active := r.session == session && !r.closed && session.ctx.Err() == nil
+		if r.session == session && r.conn == conn {
+			r.conn = nil
 		}
-
-		// Being replaced is terminal: the player is live on another
-		// connection now, and redialing would evict them right back.
+		r.mu.Unlock()
+		_ = conn.Close()
+		if !active {
+			return
+		}
 		if errors.Is(err, ErrReplaced) {
-			r.fail(ErrReplaced)
+			if r.finish(session, ErrReplaced) {
+				r.emit("replaced", nil)
+			}
 			return
 		}
-
-		r.emit("reconnecting", mustJSON(map[string]any{"in_ms": backoff.Milliseconds()}))
-		select {
-		case <-time.After(backoff):
-		case <-ctx.Done():
-			return
+		backoff := rtBackoffMin
+		for {
+			if session.ctx.Err() != nil {
+				return
+			}
+			r.emit("reconnecting", mustJSON(map[string]any{"in_ms": backoff.Milliseconds()}))
+			timer := time.NewTimer(backoff)
+			select {
+			case <-timer.C:
+			case <-session.ctx.Done():
+				timer.Stop()
+				return
+			}
+			next, err := r.dial(session.ctx)
+			if err == nil {
+				if !r.install(session, next) {
+					_ = next.Close()
+					return
+				}
+				conn = next
+				break
+			}
+			if backoff *= 2; backoff > rtBackoffMax {
+				backoff = rtBackoffMax
+			}
 		}
-		if backoff *= 2; backoff > rtBackoffMax {
-			backoff = rtBackoffMax
-		}
-
-		next, err := r.dial(ctx)
-		if err != nil {
-			continue // still down: keep backing off rather than giving up
-		}
-		r.mu.Lock()
-		r.conn = next
-		r.mu.Unlock()
-		conn = next
-		backoff = rtBackoffMin // a success resets the ladder
 	}
 }
 
 // readLoop pumps one connection until it fails, dispatching each frame.
-func (r *Realtime) readLoop(conn *websocket.Conn) error {
+func (r *Realtime) readLoop(session *realtimeSession, conn *websocket.Conn) error {
 	// The deadline is pushed forward by every ping the server sends; gorilla
 	// answers pings itself, so this handler only refreshes the clock.
 	_ = conn.SetReadDeadline(time.Now().Add(rtReadWait))
@@ -235,7 +354,6 @@ func (r *Realtime) readLoop(conn *websocket.Conn) error {
 			// 1008 is the server evicting this connection in favour of a newer
 			// one for the same player.
 			if websocket.IsCloseError(err, websocket.ClosePolicyViolation) {
-				r.emit("replaced", nil)
 				return ErrReplaced
 			}
 			return err
@@ -245,6 +363,9 @@ func (r *Realtime) readLoop(conn *websocket.Conn) error {
 		var env envelope
 		if err := json.Unmarshal(raw, &env); err != nil {
 			continue // the server only sends valid frames; a torn one is not worth killing the link over
+		}
+		if err := session.ctx.Err(); err != nil {
+			return err
 		}
 		r.emit(env.Type, env.Data)
 	}
@@ -261,14 +382,6 @@ func (r *Realtime) emit(event string, data json.RawMessage) {
 	}
 }
 
-// fail records a terminal error and marks the client closed.
-func (r *Realtime) fail(err error) {
-	r.mu.Lock()
-	r.err = err
-	r.closed = true
-	r.mu.Unlock()
-}
-
 // Err reports why the connection ended for good, or nil while it is live or
 // cleanly closed. Check it in a "replaced" handler to tell an eviction from
 // an ordinary Close.
@@ -283,20 +396,20 @@ func (r *Realtime) Close() error {
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
-		return nil // idempotent: a game may Close on quit and on error
+		return nil
 	}
 	r.closed = true
-	conn := r.conn
+	conn, session := r.conn, r.session
+	r.conn, r.session = nil, nil
 	r.mu.Unlock()
-
+	if session != nil {
+		session.cancel()
+	}
 	if conn == nil {
 		return nil
 	}
-	// Send a courteous close frame so the server frees the slot at once
-	// instead of waiting for the read deadline.
-	_ = conn.WriteControl(websocket.CloseMessage,
-		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
-		time.Now().Add(rtWriteWait))
+	// Close the transport directly so a blocked reader or writer cannot delay
+	// cancellation while a courteous close frame waits for the write lock.
 	return conn.Close()
 }
 
