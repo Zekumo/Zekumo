@@ -76,6 +76,7 @@ type Realtime struct {
 	// gorilla's default dialer.
 	Dialer *websocket.Dialer
 
+	writeMu  sync.Mutex // gorilla permits only one concurrent data writer
 	mu       sync.Mutex
 	conn     *websocket.Conn
 	handlers map[string][]Handler
@@ -220,8 +221,12 @@ func (r *Realtime) readLoop(conn *websocket.Conn) error {
 	// The deadline is pushed forward by every ping the server sends; gorilla
 	// answers pings itself, so this handler only refreshes the clock.
 	_ = conn.SetReadDeadline(time.Now().Add(rtReadWait))
-	conn.SetPingHandler(func(string) error {
-		return conn.SetReadDeadline(time.Now().Add(rtReadWait))
+	conn.SetPingHandler(func(payload string) error {
+		if err := conn.SetReadDeadline(time.Now().Add(rtReadWait)); err != nil {
+			return err
+		}
+		// Installing a handler replaces gorilla's automatic pong handler.
+		return conn.WriteControl(websocket.PongMessage, []byte(payload), time.Now().Add(rtWriteWait))
 	})
 
 	for {
@@ -299,6 +304,8 @@ func (r *Realtime) Close() error {
 // returns an error if the connection is down — a game usually ignores that
 // for state updates, since the next tick supersedes them anyway.
 func (r *Realtime) Send(event string, data any) error {
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
 	r.mu.Lock()
 	conn, closed := r.conn, r.closed
 	r.mu.Unlock()
@@ -309,7 +316,15 @@ func (r *Realtime) Send(event string, data any) error {
 		return errors.New("zekumo: realtime client is not connected yet")
 	}
 
-	payload, err := json.Marshal(envelope{Type: event, Data: mustJSON(data)})
+	var raw json.RawMessage
+	var err error
+	if data != nil {
+		raw, err = json.Marshal(data)
+		if err != nil {
+			return fmt.Errorf("zekumo: encode %s: %w", event, err)
+		}
+	}
+	payload, err := json.Marshal(envelope{Type: event, Data: raw})
 	if err != nil {
 		return fmt.Errorf("zekumo: encode %s: %w", event, err)
 	}
@@ -426,7 +441,7 @@ func (r *Realtime) ListRoomsPage(offset, limit int) error {
 }
 
 // GetRoom requests the current membership snapshot, delivered as room.info.
-func (r *Realtime) GetRoom() error { return r.Send("room.get", nil) }
+func (r *Realtime) GetRoom() error { return r.Send("room.get", struct{}{}) }
 
 // UpdateRoom is owner-only; a successful snapshot is broadcast as room.updated.
 func (r *Realtime) UpdateRoom(update RoomUpdate) error { return r.Send("room.update", update) }

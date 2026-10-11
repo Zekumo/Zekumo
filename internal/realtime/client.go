@@ -31,6 +31,9 @@ type Client struct {
 	rateAt time.Time
 	tokens float64
 
+	// requestID is set only during synchronous dispatch, protected by hub.mu.
+	requestID string
+
 	room *Room
 	subs map[string]struct{}
 
@@ -98,8 +101,13 @@ func (c *Client) releaseQueued(payload []byte) {
 	}
 }
 
+// reply and sendError are used only by handlers with hub.mu held.
+func (c *Client) reply(typ string, data any) {
+	c.enqueue(correlatedMsg(typ, data, c.requestID))
+}
+
 func (c *Client) sendError(code, message string) {
-	c.enqueue(msg("error", map[string]string{"code": code, "message": message}))
+	c.reply("error", map[string]string{"code": code, "message": message})
 }
 
 // close stops enqueueing and discards queued messages immediately. Socket teardown
@@ -143,7 +151,7 @@ func (c *Client) readPump() {
 		}
 		var env Envelope
 		if err := json.Unmarshal(raw, &env); err != nil {
-			c.sendError("bad_json", "messages must be JSON: {\"type\": ..., \"data\": ...}")
+			c.enqueue(msg("error", map[string]string{"code": "bad_json", "message": "messages must be JSON: {\"type\": ..., \"data\": ...}"}))
 			continue
 		}
 		c.hub.dispatch(c, env)

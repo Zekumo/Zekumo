@@ -194,6 +194,10 @@ func itoa(n int) string {
 // Auth mode is decided per call: authed requests carry the bearer token,
 // public ones (update checks, announcements) deliberately do not.
 func (c *Client) do(ctx context.Context, method, path string, body, out any, authed bool) error {
+	return c.doWithHeaders(ctx, method, path, body, out, authed, nil)
+}
+
+func (c *Client) doWithHeaders(ctx context.Context, method, path string, body, out any, authed bool, headers map[string]string) error {
 	var reader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -206,6 +210,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, aut
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
 	if err != nil {
 		return fmt.Errorf("zekumo: build request: %w", err)
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")

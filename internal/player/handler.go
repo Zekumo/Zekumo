@@ -77,11 +77,17 @@ func (h *Handler) GetData(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
+	w.Header().Set("ETag", `"`+entry.Revision+`"`)
+	w.Header().Set("Cache-Control", "private, no-cache")
 	httpx.JSON(w, http.StatusOK, entry)
 }
 
 // PutData handles PUT /v1/player/data/{key}; the body is the JSON value itself.
 func (h *Handler) PutData(w http.ResponseWriter, r *http.Request) {
+	condition, ok := saveCondition(w, r, true)
+	if !ok {
+		return
+	}
 	claims := auth.ClaimsFrom(r.Context())
 	var value json.RawMessage
 	if httpx.Decode(w, r, &value) != nil {
@@ -91,18 +97,32 @@ func (h *Handler) PutData(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusRequestEntityTooLarge, "value_too_large", "value exceeds 256KB")
 		return
 	}
-	entry, err := h.Data.Put(r.Context(), claims.Subject, r.PathValue("key"), value)
+	entry, err := h.Data.PutConditional(r.Context(), claims.Subject, r.PathValue("key"), value, condition)
+	if errors.Is(err, repo.ErrSaveConflict) {
+		saveConflict(w)
+		return
+	}
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
+	w.Header().Set("ETag", `"`+entry.Revision+`"`)
+	w.Header().Set("Cache-Control", "private, no-cache")
 	httpx.JSON(w, http.StatusOK, entry)
 }
 
 // DeleteData handles DELETE /v1/player/data/{key}.
 func (h *Handler) DeleteData(w http.ResponseWriter, r *http.Request) {
+	condition, ok := saveCondition(w, r, false)
+	if !ok {
+		return
+	}
 	claims := auth.ClaimsFrom(r.Context())
-	err := h.Data.Delete(r.Context(), claims.Subject, r.PathValue("key"))
+	err := h.Data.DeleteConditional(r.Context(), claims.Subject, r.PathValue("key"), condition.Revision)
+	if errors.Is(err, repo.ErrSaveConflict) {
+		saveConflict(w)
+		return
+	}
 	if errors.Is(err, repo.ErrNotFound) {
 		httpx.Error(w, http.StatusNotFound, "not_found", "no data under this key")
 		return

@@ -247,3 +247,13 @@ up to 128 UTF-8 bytes, metadata up to 8 KiB, and state/messages up to 16 KiB.
 Reconnect does not restore membership automatically. Locking prevents new joins;
 kicking is not a persistent ban. This is lightweight room synchronization,
 not a persistent MMO world or an authoritative simulation.
+
+## Conflict-safe cloud saves
+
+`Data.GetEntry` returns both value and revision. `Data.CompareAndSet` and
+`Data.DeleteIfRevision` require the last observed revision; `Data.Create` only
+creates absent slots. Handle `IsCode(err, "save_conflict")` by reading and merging
+explicitly. No automatic retry is performed. Upgrade the backend first; old
+servers ignore the conditional headers. `Data.Set` remains unconditional and
+now sends the original JSON value without the old unintended `value` wrapper.
+See [the cloud-save guide](../docs/cloud-save-conflicts.md).

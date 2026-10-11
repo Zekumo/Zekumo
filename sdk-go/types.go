@@ -51,6 +51,7 @@ type Login struct {
 // Entry is one save slot. Value is nil in list responses (the server omits
 // bodies there) and populated by Get.
 type Entry struct {
+	Revision  string          `json:"revision"`
 	Key       string          `json:"key"`
 	Value     json.RawMessage `json:"value,omitempty"`
 	UpdatedAt time.Time       `json:"updated_at"`

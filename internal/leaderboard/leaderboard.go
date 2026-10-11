@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 
 	"github.com/redis/go-redis/v9"
@@ -41,30 +42,15 @@ func (s *Service) TopFriends(ctx context.Context, gameID, board, playerID string
 	for _, id := range ids {
 		allowed[id] = struct{}{}
 	}
-	zs, err := s.RDB.ZRevRangeWithScores(ctx, key(gameID, board), 0, -1).Result()
+	members := make([]string, 0, len(allowed))
+	for id := range allowed {
+		members = append(members, id)
+	}
+	all, err := s.friendScores(ctx, gameID, board, members)
 	if err != nil {
 		return nil, err
 	}
-	all := make([]Entry, 0, len(allowed))
-	for _, z := range zs {
-		id, ok := z.Member.(string)
-		if !ok {
-			continue
-		}
-		if _, ok := allowed[id]; !ok {
-			continue
-		}
-		all = append(all, Entry{PlayerID: id, Score: int64(z.Score)})
-	}
-	if offset < 0 {
-		offset = 0
-	}
-	if limit <= 0 || limit > 100 {
-		limit = 50
-	}
-	start := minInt64(offset, int64(len(all)))
-	end := minInt64(start+limit, int64(len(all)))
-	page := all[start:end]
+	page, start := friendPage(all, offset, limit)
 	if len(page) == 0 {
 		return []Entry{}, nil
 	}
@@ -83,6 +69,79 @@ func (s *Service) TopFriends(ctx context.Context, gameID, board, playerID string
 		page[i].Nickname = nicks[page[i].PlayerID]
 	}
 	return page, nil
+}
+
+// friendScores reads only the accepted friends and caller in one atomic Redis
+// command. ZMSCORE requires Redis 6.2+ (our deployment uses Redis 7). Use the raw
+// reply because go-redis's FloatSliceCmd maps missing members to zero scores.
+func (s *Service) friendScores(ctx context.Context, gameID, board string, ids []string) ([]Entry, error) {
+	if len(ids) == 0 {
+		return []Entry{}, nil
+	}
+	args := make([]any, 2, len(ids)+2)
+	args[0], args[1] = "ZMSCORE", key(gameID, board)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	scores, err := s.RDB.Do(ctx, args...).Slice()
+	if err != nil {
+		return nil, err
+	}
+	return friendEntries(ids, scores)
+}
+
+func friendEntries(ids []string, scores []any) ([]Entry, error) {
+	if len(ids) != len(scores) {
+		return nil, fmt.Errorf("unexpected friend score count")
+	}
+	type scoredPlayer struct {
+		id    string
+		score float64
+	}
+	ranked := make([]scoredPlayer, 0, len(ids))
+	for i, raw := range scores {
+		if raw == nil {
+			continue
+		}
+		var score float64
+		switch value := raw.(type) {
+		case string: // RESP2 bulk string
+			var err error
+			score, err = strconv.ParseFloat(value, 64)
+			if err != nil {
+				return nil, fmt.Errorf("invalid friend score: %w", err)
+			}
+		case float64: // RESP3 double
+			score = value
+		default:
+			return nil, fmt.Errorf("unexpected friend score type %T", raw)
+		}
+		ranked = append(ranked, scoredPlayer{id: ids[i], score: score})
+	}
+	// Match ZREVRANGE exactly, before converting scores to the API's int64.
+	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].score != ranked[j].score {
+			return ranked[i].score > ranked[j].score
+		}
+		return ranked[i].id > ranked[j].id
+	})
+	entries := make([]Entry, len(ranked))
+	for i, player := range ranked {
+		entries[i] = Entry{PlayerID: player.id, Score: int64(player.score)}
+	}
+	return entries, nil
+}
+
+func friendPage(all []Entry, offset, limit int64) ([]Entry, int64) {
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	start := minInt64(offset, int64(len(all)))
+	end := minInt64(start+limit, int64(len(all)))
+	return all[start:end], start
 }
 
 func minInt64(a, b int64) int64 {

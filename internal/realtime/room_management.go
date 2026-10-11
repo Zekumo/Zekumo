@@ -63,8 +63,11 @@ func (h *Hub) handleRoomUpdate(c *Client, data json.RawMessage) {
 	}
 	payload := msg("room.updated", r.snapshot())
 	for _, member := range r.members {
-		member.enqueue(payload)
+		if member != c {
+			member.enqueue(payload)
+		}
 	}
+	c.reply("room.updated", r.snapshot())
 }
 
 type roomTargetReq struct {
@@ -92,7 +95,7 @@ func (h *Hub) handleRoomKick(c *Client, data json.RawMessage) {
 	}
 	h.leaveRoomLocked(target)
 	target.enqueue(msg("room.kicked", map[string]string{"room_id": r.ID, "reason": "removed_by_owner"}))
-	c.enqueue(msg("room.kick_ok", map[string]string{"player_id": req.PlayerID, "room_id": r.ID}))
+	c.reply("room.kick_ok", map[string]string{"player_id": req.PlayerID, "room_id": r.ID})
 }
 
 func (h *Hub) handleRoomTransfer(c *Client, data json.RawMessage) {
@@ -118,7 +121,7 @@ func (h *Hub) handleRoomTransfer(c *Client, data json.RawMessage) {
 	for _, member := range r.members {
 		member.enqueue(payload)
 	}
-	c.enqueue(msg("room.transferred", r.snapshot()))
+	c.reply("room.transferred", r.snapshot())
 }
 
 func (h *Hub) handleRoomGet(c *Client, data json.RawMessage) {
@@ -128,6 +131,6 @@ func (h *Hub) handleRoomGet(c *Client, data json.RawMessage) {
 		return
 	}
 	if r := h.managedRoom(c, false); r != nil {
-		c.enqueue(msg("room.info", r.snapshot()))
+		c.reply("room.info", r.snapshot())
 	}
 }

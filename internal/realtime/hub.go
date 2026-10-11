@@ -60,13 +60,27 @@ func decodeRoomRequest(data json.RawMessage, dst any) error {
 }
 
 type Envelope struct {
-	Type string          `json:"type"`
-	Data json.RawMessage `json:"data,omitempty"`
+	Type      string          `json:"type"`
+	Data      json.RawMessage `json:"data,omitempty"`
+	RequestID string          `json:"request_id,omitempty"`
 }
 
 func msg(typ string, data any) []byte {
-	raw, _ := json.Marshal(data)
-	out, _ := json.Marshal(Envelope{Type: typ, Data: raw})
+	return correlatedMsg(typ, data, "")
+}
+
+func correlatedMsg(typ string, data any, requestID string) []byte {
+	// Encode the data and envelope together. Marshaling data into RawMessage
+	// first copied it and scanned the resulting JSON again for every broadcast.
+	out, err := json.Marshal(struct {
+		Type      string `json:"type"`
+		Data      any    `json:"data"`
+		RequestID string `json:"request_id,omitempty"`
+	}{Type: typ, Data: data, RequestID: requestID})
+	if err != nil {
+		// Preserve the previous omitted-data fallback on encoding failure.
+		out, _ = json.Marshal(Envelope{Type: typ, RequestID: requestID})
+	}
 	return out
 }
 
@@ -329,7 +343,7 @@ func (h *Hub) handleRoomCreate(c *Client, data json.RawMessage) {
 	}
 	g.rooms[room.ID] = room
 	c.room = room
-	c.enqueue(msg("room.created", room.snapshot()))
+	c.reply("room.created", room.snapshot())
 }
 
 func (h *Hub) handleRoomJoin(c *Client, data json.RawMessage) {
@@ -365,7 +379,7 @@ func (h *Hub) handleRoomJoin(c *Client, data json.RawMessage) {
 			m.enqueue(joined)
 		}
 	}
-	c.enqueue(msg("room.joined", room.snapshot()))
+	c.reply("room.joined", room.snapshot())
 }
 
 func (h *Hub) handleRoomLeave(c *Client) {
@@ -374,7 +388,7 @@ func (h *Hub) handleRoomLeave(c *Client) {
 		return
 	}
 	h.leaveRoomLocked(c)
-	c.enqueue(msg("room.left", struct{}{}))
+	c.reply("room.left", struct{}{})
 }
 
 // RoomSummary deliberately omits player identities and state from public lobbies.
@@ -428,7 +442,7 @@ func (h *Hub) handleRoomList(c *Client, data json.RawMessage) {
 		r := g.rooms[id]
 		rooms = append(rooms, RoomSummary{ID: r.ID, Name: r.Name, OwnerID: r.OwnerID, MaxPlayers: r.MaxPlayers, Locked: r.Locked, MemberCount: len(r.members), Meta: r.Meta})
 	}
-	c.enqueue(msg("room.list", map[string]any{"rooms": rooms, "total": total, "offset": req.Offset, "limit": req.Limit}))
+	c.reply("room.list", map[string]any{"rooms": rooms, "total": total, "offset": req.Offset, "limit": req.Limit})
 }
 
 // handleRoomState stores the sender's state blob and broadcasts it to roommates.
@@ -443,10 +457,10 @@ func (h *Hub) handleRoomState(c *Client, data json.RawMessage) {
 		return
 	}
 	c.room.states[c.playerID] = data
-	payload := msg("room.state", map[string]any{
-		"player_id": c.playerID,
-		"state":     data,
-	})
+	payload := msg("room.state", struct {
+		PlayerID string          `json:"player_id"`
+		State    json.RawMessage `json:"state"`
+	}{PlayerID: c.playerID, State: data})
 	for id, m := range c.room.members {
 		if id != c.playerID {
 			m.enqueue(payload)
@@ -463,10 +477,10 @@ func (h *Hub) handleRoomMsg(c *Client, data json.RawMessage) {
 		c.sendError("not_in_room", "join a room before sending messages")
 		return
 	}
-	payload := msg("room.msg", map[string]any{
-		"player_id": c.playerID,
-		"data":      data,
-	})
+	payload := msg("room.msg", struct {
+		Data     json.RawMessage `json:"data"`
+		PlayerID string          `json:"player_id"`
+	}{Data: data, PlayerID: c.playerID})
 	for id, m := range c.room.members {
 		if id != c.playerID {
 			m.enqueue(payload)
@@ -494,7 +508,7 @@ func (h *Hub) handleChatSub(c *Client, data json.RawMessage, sub bool) {
 		}
 		g.channels[req.Channel][c] = struct{}{}
 		c.subs[req.Channel] = struct{}{}
-		c.enqueue(msg("chat.subbed", map[string]string{"channel": req.Channel}))
+		c.reply("chat.subbed", map[string]string{"channel": req.Channel})
 	} else {
 		delete(c.subs, req.Channel)
 		if subs, ok := g.channels[req.Channel]; ok {
@@ -503,7 +517,7 @@ func (h *Hub) handleChatSub(c *Client, data json.RawMessage, sub bool) {
 				delete(g.channels, req.Channel)
 			}
 		}
-		c.enqueue(msg("chat.unsubbed", map[string]string{"channel": req.Channel}))
+		c.reply("chat.unsubbed", map[string]string{"channel": req.Channel})
 	}
 }
 
@@ -544,8 +558,18 @@ func (h *Hub) dispatch(c *Client, env Envelope) {
 	if g == nil || g.clients[c.playerID] != c {
 		return
 	}
+	// Only direct replies inherit an ID; room/chat broadcasts never do.
+	validID := validRequestID(env.RequestID)
+	if validID {
+		c.requestID = env.RequestID
+	}
+	defer func() { c.requestID = "" }()
 	if !c.allowMessage(time.Now()) {
 		c.sendError("rate_limited", "realtime message rate exceeded")
+		return
+	}
+	if !validID {
+		c.sendError("bad_request_id", "request_id must be at most 64 ASCII letters, digits, underscores or hyphens")
 		return
 	}
 	switch env.Type {
@@ -576,7 +600,7 @@ func (h *Hub) dispatch(c *Client, env Envelope) {
 	case "chat.send":
 		h.handleChatSend(c, env.Data)
 	case "ping":
-		c.enqueue(msg("pong", struct{}{}))
+		c.reply("pong", struct{}{})
 	default:
 		c.sendError("unknown_type", "unknown message type: "+env.Type)
 	}

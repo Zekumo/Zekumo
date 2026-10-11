@@ -59,6 +59,7 @@ type LinkedPlayer struct {
 }
 
 type DataEntry struct {
+	Revision  string          `json:"revision,omitempty"`
 	Key       string          `json:"key"`
 	Value     json.RawMessage `json:"value,omitempty"`
 	UpdatedAt time.Time       `json:"updated_at"`

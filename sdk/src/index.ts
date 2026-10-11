@@ -26,7 +26,15 @@ export interface LoginResult {
   player: Player;
 }
 
+export interface SaveOptions {
+  /** Last observed revision, or "*" to require that the slot exists. */
+  expectedRevision?: string;
+  /** Create only: fail if another device already created this slot. */
+  createOnly?: boolean;
+}
+
 export interface DataEntry {
+  revision: string;
   key: string;
   value?: Json;
   updated_at: string;
@@ -248,13 +256,13 @@ class Http {
   async request<T>(
     method: string,
     path: string,
-    opts: { body?: unknown; query?: Query; auth?: boolean } = {},
+    opts: { body?: unknown; query?: Query; auth?: boolean; headers?: Record<string, string> } = {},
   ): Promise<T> {
     const url = new URL(this.sdk.baseUrl + path);
     for (const [k, v] of Object.entries(opts.query ?? {})) {
       if (v !== undefined) url.searchParams.set(k, String(v));
     }
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...opts.headers };
     if (opts.body !== undefined) headers["Content-Type"] = "application/json";
     if (opts.auth !== false) {
       if (!this.sdk.token) throw new ZekumoError(0, "no_token", "call auth.loginAsGuest/login first");
@@ -350,17 +358,39 @@ class PlayerDataAPI {
   }
 
   async get<T extends Json = Json>(key: string): Promise<T> {
-    const res = await this.http.request<{ value: T }>("GET", `/v1/player/data/${encodeURIComponent(key)}`);
-    return res.value;
+    return (await this.getEntry<T>(key)).value;
   }
 
-  set(key: string, value: Json): Promise<DataEntry> {
-    return this.http.request("PUT", `/v1/player/data/${encodeURIComponent(key)}`, { body: value });
+  /** Read the value together with the revision needed for a safe update. */
+  getEntry<T extends Json = Json>(key: string): Promise<DataEntry & { value: T }> {
+    return this.http.request("GET", `/v1/player/data/${encodeURIComponent(key)}`);
   }
 
-  delete(key: string): Promise<void> {
-    return this.http.request("DELETE", `/v1/player/data/${encodeURIComponent(key)}`);
+  async set(key: string, value: Json, opts: SaveOptions = {}): Promise<DataEntry> {
+    return this.http.request("PUT", `/v1/player/data/${encodeURIComponent(key)}`, {
+      body: value, headers: this.conditions(opts),
+    });
   }
+
+  async delete(key: string, opts: Pick<SaveOptions, "expectedRevision"> = {}): Promise<void> {
+    return this.http.request("DELETE", `/v1/player/data/${encodeURIComponent(key)}`, {
+      headers: this.conditions(opts),
+    });
+  }
+
+  private conditions(opts: SaveOptions): Record<string, string> {
+    if (opts.createOnly && opts.expectedRevision !== undefined) {
+      throw new ZekumoError(0, "bad_options", "createOnly and expectedRevision cannot be combined");
+    }
+    if (opts.createOnly) return { "If-None-Match": "*" };
+    if (opts.expectedRevision === undefined) return {};
+    if (opts.expectedRevision === "*") return { "If-Match": "*" };
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(opts.expectedRevision)) {
+      throw new ZekumoError(0, "bad_options", "expectedRevision must be the save's UUID revision or *");
+    }
+    return { "If-Match": `"${opts.expectedRevision}"` };
+  }
+
 }
 
 class LeaderboardsAPI {
@@ -658,6 +688,7 @@ export interface RealtimeEventData {
 const OPEN = 1;
 const REPLACED_CODE = 1008;
 const REQUEST_TIMEOUT_MS = 10_000;
+const MAX_PENDING_REQUESTS = 64;
 const PING_INTERVAL_MS = 25_000;
 const MAX_BACKOFF_MS = 30_000;
 
@@ -671,6 +702,14 @@ export class RealtimeClient {
   private manuallyClosed = false;
   private everConnected = false;
   private connecting?: Promise<void>;
+  private cancelOpening?: () => void;
+  private nextRequestID = 0;
+  private pending = new Map<string, {
+    replyType: string;
+    resolve: (data: unknown) => void;
+    reject: (error: unknown) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
 
   constructor(private readonly sdk: Zekumo) {}
 
@@ -679,6 +718,10 @@ export class RealtimeClient {
   }
 
   connect(): Promise<void> {
+    // Manual connects take ownership from any pending retry. Automatic retries
+    // use this same entry point so only one opening promise owns the socket.
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = undefined;
     if (this.connected) return Promise.resolve();
     if (this.connecting) return this.connecting;
     if (!this.sdk.token) return Promise.reject(new ZekumoError(0, "no_token", "log in before connecting"));
@@ -707,6 +750,13 @@ export class RealtimeClient {
       const ws = new WS(this.wsURL());
       this.ws = ws;
       let settled = false;
+      const cancelOpening = () => {
+        if (!settled) {
+          settled = true;
+          reject(new ZekumoError(0, "ws_closed", "connection closed before opening"));
+        }
+      };
+      this.cancelOpening = cancelOpening;
 
       ws.addEventListener("open", () => {
         if (this.ws !== ws) {
@@ -714,6 +764,7 @@ export class RealtimeClient {
           return;
         }
         settled = true;
+        if (this.cancelOpening === cancelOpening) this.cancelOpening = undefined;
         this.attempts = 0;
         const resub = this.everConnected;
         this.everConnected = true;
@@ -723,28 +774,47 @@ export class RealtimeClient {
         resolve();
       });
       ws.addEventListener("message", (event: { data: unknown }) => {
-        let env: { type?: string; data?: unknown };
+        if (this.ws !== ws) return;
+        let env: { type?: string; data?: unknown; request_id?: string };
         try {
           env = JSON.parse(String((event as { data: unknown }).data));
         } catch {
           return;
         }
-        if (env.type) this.emit(env.type, env.data);
+        if (!env || typeof env.type !== "string") return;
+        if (typeof env.request_id === "string") {
+          const pending = this.pending.get(env.request_id);
+          if (pending) {
+            this.pending.delete(env.request_id);
+            clearTimeout(pending.timer);
+            if (env.type === "error") {
+              const error = env.data as { code?: string; message?: string } | null;
+              pending.reject(new ZekumoError(0, error?.code ?? "ws_error", error?.message ?? "realtime error"));
+            } else if (env.type === pending.replyType) {
+              pending.resolve(env.data);
+            } else {
+              pending.reject(new ZekumoError(0, "unexpected_reply", `expected ${pending.replyType}, received ${env.type}`));
+            }
+          }
+        }
+        this.emit(env.type, env.data);
       });
       ws.addEventListener("close", (event: { code?: number; reason?: string }) => {
         if (this.ws !== ws) return;
+        if (this.cancelOpening === cancelOpening) this.cancelOpening = undefined;
         this.stopPing();
+        this.rejectPending(new ZekumoError(0, "ws_closed", "connection closed before reply"));
         const e = event as { code?: number; reason?: string };
         this.emit("close", { code: e.code, reason: e.reason });
+        if (!settled) {
+          settled = true;
+          reject(new ZekumoError(0, "ws_closed", e.reason || "connection closed"));
+        }
         if (e.code === REPLACED_CODE) {
           this.emit("replaced", {});
           return;
         }
         if (!this.manuallyClosed) this.scheduleReconnect();
-        if (!settled) {
-          settled = true;
-          reject(new ZekumoError(0, "ws_closed", e.reason || "connection closed"));
-        }
       });
       ws.addEventListener("error", () => {
         if (!settled && ws.readyState !== OPEN) {
@@ -755,15 +825,16 @@ export class RealtimeClient {
   }
 
   private scheduleReconnect(): void {
-    if (this.reconnectTimer) return;
+    if (this.reconnectTimer || this.manuallyClosed || this.connected) return;
     const backoff = Math.min(1000 * 2 ** this.attempts, MAX_BACKOFF_MS);
     const delay = backoff / 2 + Math.random() * (backoff / 2);
     this.attempts += 1;
-    this.emit("reconnecting", { attempt: this.attempts, delay });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;
-      if (!this.manuallyClosed) this.open().catch(() => undefined);
+      if (!this.manuallyClosed) this.connect().catch(() => undefined);
     }, delay);
+    // Install first: a reconnecting listener may connect or close synchronously.
+    this.emit("reconnecting", { attempt: this.attempts, delay });
   }
 
   private startPing(): void {
@@ -778,6 +849,10 @@ export class RealtimeClient {
 
   close(): void {
     this.manuallyClosed = true;
+    this.cancelOpening?.();
+    this.cancelOpening = undefined;
+    this.connecting = undefined;
+    this.rejectPending(new ZekumoError(0, "ws_closed", "client closed before reply"));
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
     this.stopPing();
@@ -806,39 +881,43 @@ export class RealtimeClient {
   }
 
   send(type: string, data?: unknown): void {
+    this.sendEnvelope(type, data);
+  }
+
+  private sendEnvelope(type: string, data?: unknown, requestID?: string): void {
     if (!this.connected || !this.ws) {
       throw new ZekumoError(0, "not_connected", "realtime connection is not open");
     }
-    this.ws.send(JSON.stringify({ type, data }));
+    this.ws.send(JSON.stringify({ type, data, request_id: requestID }));
   }
 
-  /** Send a request and resolve on the expected reply (or reject on "error"). */
+  private rejectPending(error: ZekumoError): void {
+    const pending = [...this.pending.values()];
+    this.pending.clear();
+    for (const request of pending) {
+      clearTimeout(request.timer);
+      request.reject(error);
+    }
+  }
+
+  /** Match only the exact request's direct reply, never a room broadcast. */
   private request<T>(sendType: string, data: unknown, replyType: string): Promise<T> {
+    if (this.pending.size >= MAX_PENDING_REQUESTS) {
+      return Promise.reject(new ZekumoError(0, "too_many_requests", "at most 64 realtime requests may be pending"));
+    }
+    const id = `r${++this.nextRequestID}`;
     return new Promise<T>((resolve, reject) => {
-      const cleanup = () => {
-        this.off(replyType as RealtimeEvent, onReply as (data: unknown) => void);
-        this.off("error", onError as (data: unknown) => void);
-        clearTimeout(timer);
-      };
-      const onReply = (reply: T) => {
-        cleanup();
-        resolve(reply);
-      };
-      const onError = (err: { code?: string; message?: string }) => {
-        cleanup();
-        reject(new ZekumoError(0, err.code ?? "ws_error", err.message ?? "realtime error"));
-      };
       const timer = setTimeout(() => {
-        cleanup();
+        this.pending.delete(id);
         reject(new ZekumoError(0, "timeout", `no ${replyType} reply within 10s`));
       }, REQUEST_TIMEOUT_MS);
-      this.on(replyType, onReply as (d: unknown) => void);
-      this.on("error", onError);
+      this.pending.set(id, { replyType, resolve: (data) => resolve(data as T), reject, timer });
       try {
-        this.send(sendType, data);
-      } catch (err) {
-        cleanup();
-        reject(err);
+        this.sendEnvelope(sendType, data, id);
+      } catch (error) {
+        this.pending.delete(id);
+        clearTimeout(timer);
+        reject(error);
       }
     });
   }

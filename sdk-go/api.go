@@ -126,7 +126,8 @@ func (d *DataAPI) List(ctx context.Context) ([]Entry, error) {
 	var out struct {
 		Entries []Entry `json:"entries"`
 	}
-	return out.Entries, d.c.get(ctx, "/v1/player/data", &out)
+	err := d.c.get(ctx, "/v1/player/data", &out)
+	return out.Entries, err
 }
 
 // Get reads one save slot into v, which must be a pointer.
@@ -144,7 +145,10 @@ func (d *DataAPI) Get(ctx context.Context, key string, v any) error {
 // Set writes one save slot, replacing whatever was there.
 func (d *DataAPI) Set(ctx context.Context, key string, value any) (*Entry, error) {
 	var out Entry
-	return &out, d.c.put(ctx, "/v1/player/data/"+esc(key), map[string]any{"value": value}, &out)
+	if value == nil {
+		value = json.RawMessage("null")
+	}
+	return &out, d.c.put(ctx, "/v1/player/data/"+esc(key), value, &out)
 }
 
 // Delete removes one save slot.

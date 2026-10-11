@@ -79,7 +79,11 @@ function esc(s) {
 
 // JSON arguments embedded in an inline handler must be HTML-escaped first;
 // otherwise a quote in an operator-entered title can terminate the attribute.
-function inlineJSON(value) { return esc(JSON.stringify(value)); }
+function inlineJSON(value) {
+  return JSON.stringify(value).replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[char]);
+}
 
 function fmtTime(t) { return t ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : '—'; }
 

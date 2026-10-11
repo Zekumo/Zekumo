@@ -144,6 +144,8 @@ go build -ldflags "-X zekumo/internal/server.Version=$(git describe --tags --alw
 - **令牌**:登录返回 JWT,之后所有请求带 `Authorization: Bearer <token>`
   (WebSocket 用 `?token=` 查询参数)。
 
+云存档支持可选修订号条件写入，防止多设备覆盖旧进度；接入、冲突处理和迁移注意事项见 [云存档冲突保护](docs/cloud-save-conflicts.md)。
+
 ## 玩家 HTTP API(`/v1`)
 
 错误统一为 `{"error": {"code": "...", "message": "..."}}`。

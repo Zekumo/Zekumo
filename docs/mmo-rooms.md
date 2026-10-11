@@ -16,7 +16,7 @@
 
 `GET /admin/api/games/{id}/rooms?offset=0&limit=20` 返回房间摘要、总数和在线连接数；管理监控不包含任意 metadata 或玩家状态。控制台有分页与手动刷新，不是持久化统计。
 
-SDK 示例及精确类型参见 [TypeScript SDK](../sdk/README.md) 和 [Go SDK](../sdk-go/README.md)。TypeScript 协议没有请求关联 ID，同一连接上的请求方法请依次 await，避免并发等待相同类型响应。
+SDK 示例及精确类型参见 [TypeScript SDK](../sdk/README.md) 和 [Go SDK](../sdk-go/README.md)。TypeScript SDK 已支持请求关联 ID，独立读取可并发执行；有先后依赖的创建、加入和修改操作仍应依次 await。SDK 与服务端请一起升级，旧服务端不会回传 ID。
 
 ## 资源保护
 
@@ -36,3 +36,17 @@ SDK 示例及精确类型参见 [TypeScript SDK](../sdk/README.md) 和 [Go SDK](
 本次没有持久化世界、AOI、服务器权威物理或跨节点调度，也没有增加数据库迁移。房间 metadata 对大厅访问者可见，勿放入秘密。
 
 兼容性变化：`room.list` / TypeScript `listRooms()` 现在返回分页摘要，不再返回成员状态；需要完整成员信息时使用 `room.get` / `getRoom()`。创建房间的 `max_players:0` 仍代表默认值；非法类型、未知字段和超限输入会被拒绝。
+
+## 请求关联与连接中断
+
+请求信封可携带 `request_id`（最多 64 个 ASCII 字母、数字、下划线或连字符）：
+
+```json
+{"type":"room.get","data":{},"request_id":"request_17"}
+```
+
+成功的直接响应和请求错误原样返回该 ID。房间成员广播、聊天广播及其他客户端收到的事件不带 ID；`room.update` 的请求者收到带 ID 的快照，其他成员收到不带 ID 的快照。没有 ID 的旧客户端保持原协议行为。非法 ID 会被拒绝且不会反射到响应中。
+
+ID 仅用于匹配响应，不是幂等键、鉴权信息或重放保护。创建、踢人等操作成功后若连接断开，客户端仍可能没有收到响应；不要据此自动重试。先重新连接并查询状态，由游戏业务决定恢复方式。客户端在断开时拒绝待处理请求，不自动重放。
+
+TypeScript SDK 限制最多 64 个待处理请求，默认响应超时 10 秒。旧版 Go SDK 的事件式方法仍兼容，不要求发送 ID。Go SDK 同时修复并发写入序列化、WebSocket ping/pong 和 `GetRoom` 空对象请求。

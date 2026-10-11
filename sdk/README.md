@@ -90,8 +90,13 @@ mc.realtime.on("room.owner_changed", ({ owner_id }) => console.log(owner_id));
 `listRooms()` now returns lobby summaries, not full member snapshots. Use
 `listRoomsPage()` for `total`, `offset`, and `limit`; pages default to 20 and are
 capped at 50. Only room members can call `getRoom()` to obtain member state.
-Await each realtime request before issuing another: the wire protocol does not
-have request IDs. Room update events are also broadcast to members.
+Realtime requests use bounded `request_id` correlation, so independent calls may
+run concurrently (up to 64 pending calls per connection). Only the matching
+direct reply settles a request; broadcasts and unrelated errors still reach
+event listeners. Requests reject immediately on close and are never replayed.
+Upgrade the server together with this SDK: older servers do not echo IDs.
+A timeout means the outcome is unknown, not that a mutation failed. Read the
+current room state before deciding whether to retry a mutation.
 
 Room names are limited to 128 UTF-8 bytes, metadata to 8 KiB, and each player
 state/message to 16 KiB. Capacity is 1–200 (default 20); an owner cannot shrink
@@ -104,3 +109,12 @@ restore room membership automatically. This is lightweight room synchronization,
 not a persistent MMO world or an authoritative simulation. The admin console's
 实时房间 page shows a manually refreshed, tenant-scoped snapshot of room counts,
 connections, occupancy, and locks without player state or room metadata.
+
+## Conflict-safe cloud saves
+
+Use `playerData.getEntry(key)` to read the opaque revision. Pass
+`{ expectedRevision: entry.revision }` to `set` or `delete`, or
+`{ createOnly: true }` to `set` for first-write-only creation. A mismatch rejects
+with `ZekumoError` status 412 and code `save_conflict`; reload and merge explicitly.
+Upgrade the backend first: old servers ignore conditional headers.
+See [the cloud-save guide](../docs/cloud-save-conflicts.md).
