@@ -50,9 +50,10 @@ async function openFn(name) {
   if (!contextCurrent(ctx) || window.__fn !== name) return;
   const host = document.getElementById('fnDetail');
   if (!host) return;
+  host.dataset.revision = String(f.revision);
   host.innerHTML = `
     <div class="card-head">
-      <h2>${esc(f.name)}</h2>
+      <h2>${esc(f.name)} · v${f.revision}</h2>
       <span class="dim">更新于 ${fmtAgo(f.updated_at)}</span>
     </div>
     <div class="row">
@@ -67,10 +68,13 @@ async function openFn(name) {
       <span class="label">函数代码</span></label>
     <div class="row" style="margin-top:16px">
       <button class="btn filled" data-write onclick="saveFn('${esc(f.name)}')">保存</button>
-      <button class="btn outlined" data-write onclick="testFn('${esc(f.name)}')">测试运行</button>
+      <button class="btn outlined" data-write onclick="testFn('${esc(f.name)}')">测试草稿</button>
+      <button class="btn outlined" onclick="showFnHistory('${esc(f.name)}')">版本历史</button>
       <button class="btn text danger" data-write onclick="deleteFn('${esc(f.name)}')">删除</button>
     </div>
-    <div id="fnOut"></div>
+    <p class="dim">测试草稿不会发布代码，但会读写真实游戏数据。仅最近 50 个版本保留。</p>
+    <label class="field"><textarea id="fnTestBody">{}</textarea><span class="label">测试请求 JSON</span></label>
+    <div id="fnHistory"></div><div id="fnOut"></div>
     <p class="dim" style="margin-top:20px">
       调用地址:<code>POST /v1/functions/${esc(f.name)}</code>${f.public
         ? `,或免登录 <code>POST /v1/apps/${esc(state.game.app_id)}/functions/${esc(f.name)}</code>` : ''}
@@ -80,6 +84,7 @@ async function openFn(name) {
 
 function fnPayload() {
   return {
+    expected_revision: Number(document.getElementById('fnDetail').dataset.revision),
     code: document.getElementById('fnCode').value,
     enabled: document.getElementById('fnEnabled').checked,
     public: document.getElementById('fnPublic').checked,
@@ -88,8 +93,11 @@ function fnPayload() {
 }
 
 async function saveFn(name) {
+  const ctx = operationContext();
   try {
-    await api('PUT', `/admin/api/games/${state.gameId}/functions/${encodeURIComponent(name)}`, fnPayload());
+    requireCurrentContext(ctx);
+    await api('PUT', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}`, fnPayload());
+    requireCurrentContext(ctx);
     toast('已保存');
     await route();
   } catch (e) { toast('保存失败:' + e.message); }
@@ -100,11 +108,12 @@ async function testFn(name) {
   const out = document.getElementById('fnOut');
   out.innerHTML = `<div class="dim" style="margin-top:16px">运行中…</div>`;
   try {
-    // Save first so the run reflects what is on screen.
-    await api('PUT', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}`, fnPayload());
+    const body = JSON.parse(document.getElementById('fnTestBody').value);
+    const code = document.getElementById('fnCode').value;
     requireCurrentContext(ctx);
-    const res = await api('POST', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}/test`, {});
+    const res = await api('POST', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}/preview`, { code, body });
     requireCurrentContext(ctx);
+    if (window.__fn !== name || !out.isConnected) return;
     out.innerHTML = `
       <div class="run-result ok">
         <div class="run-head">返回值</div>
@@ -112,6 +121,7 @@ async function testFn(name) {
         ${res.logs?.length ? `<div class="run-head">console 输出</div><pre>${esc(res.logs.join('\n'))}</pre>` : ''}
       </div>`;
   } catch (e) {
+    if (!contextCurrent(ctx) || window.__fn !== name || !out.isConnected) return;
     out.innerHTML = `<div class="run-result err"><div class="run-head">执行失败</div><pre>${esc(e.message)}</pre></div>`;
   }
 }
@@ -128,7 +138,7 @@ function newFnDialog() {
       if (!name) throw new Error('请输入函数名');
       requireCurrentContext(ctx);
       await api('PUT', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}`,
-        { code: SAMPLE_FN, enabled: true, public: false, cron_secs: 0 });
+        { code: SAMPLE_FN, enabled: true, public: false, cron_secs: 0, expected_revision: 0 });
       requireCurrentContext(ctx);
       window.__fn = name;
       toast('已创建');
@@ -143,5 +153,53 @@ function deleteFn(name) {
     window.__fn = null;
     toast('已删除');
     await route();
+  });
+}
+
+
+async function showFnHistory(name) {
+  const ctx = operationContext();
+  const host = document.getElementById('fnHistory');
+  try {
+    const { versions } = await api('GET', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}/versions`);
+    if (!contextCurrent(ctx) || window.__fn !== name || !host.isConnected) return;
+    host.innerHTML = versions.map(v => `<div class="row">
+      <span>v${v.revision} · ${esc(fmtTime(v.created_at))}</span>
+      <button class="btn text" onclick="loadFnVersion('${esc(name)}', ${v.revision})">载入草稿</button>
+      <button class="btn text" data-write onclick="restoreFnVersion('${esc(name)}', ${v.revision})">恢复发布</button>
+    </div>`).join('');
+    applySurfaceAccess(host);
+  } catch (e) { if (contextCurrent(ctx)) toast(e.message); }
+}
+
+async function loadFnVersion(name, revision) {
+  const ctx = operationContext();
+  const host = document.getElementById('fnDetail');
+  try {
+    const v = await api('GET', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}/versions/${revision}`);
+    if (!contextCurrent(ctx) || window.__fn !== name || !host.isConnected) return;
+    document.getElementById('fnCode').value = v.code || '';
+    document.getElementById('fnEnabled').checked = v.enabled;
+    document.getElementById('fnPublic').checked = v.public;
+    document.getElementById('fnCron').value = v.cron_secs;
+    toast('历史版本已载入草稿，尚未发布');
+  } catch (e) { if (contextCurrent(ctx)) toast(e.message); }
+}
+
+function restoreFnVersion(name, revision) {
+  const ctx = operationContext();
+  const expected = Number(document.getElementById('fnDetail').dataset.revision);
+  openDialog({
+    title: `恢复版本 v${revision}`,
+    body: '<p>将立即发布此版本的代码、启用状态、公开访问和定时设置。当前代码保留在版本历史中。</p>',
+    confirmText: '恢复发布',
+    onConfirm: async () => {
+      requireCurrentContext(ctx);
+      await api('POST', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}/versions/${revision}/restore`,
+        { expected_revision: expected });
+      requireCurrentContext(ctx);
+      toast('已恢复为新版本');
+      await route();
+    },
   });
 }

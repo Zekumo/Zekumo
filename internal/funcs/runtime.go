@@ -54,15 +54,16 @@ func (rt *Runtime) limits() *guard {
 
 // Request is what the script sees as the global `request`.
 type Request struct {
-	Method string         `json:"method"`
-	Body   any            `json:"body"`
+	Method string            `json:"method"`
+	Body   any               `json:"body"`
 	Query  map[string]string `json:"query"`
-	Player any            `json:"player"` // {id, nickname} or nil
+	Player any               `json:"player"` // {id, nickname} or nil
 }
 
 type Result struct {
-	Result any      `json:"result"`
-	Logs   []string `json:"logs"`
+	Revision int64    `json:"revision"`
+	Result   any      `json:"result"`
+	Logs     []string `json:"logs"`
 }
 
 // Execute runs one cloud function invocation. Script errors come back as

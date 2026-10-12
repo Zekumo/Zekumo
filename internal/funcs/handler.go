@@ -3,9 +3,11 @@ package funcs
 import (
 	"encoding/json"
 	"errors"
+	"github.com/dop251/goja"
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 
 	"zekumo/internal/auth"
 	"zekumo/internal/httpx"
@@ -75,6 +77,7 @@ func (h *Handler) run(w http.ResponseWriter, r *http.Request, gameID string, fn 
 		httpx.Error(w, http.StatusBadRequest, "function_error", err.Error())
 		return
 	}
+	res.Revision = fn.Revision
 	httpx.JSON(w, http.StatusOK, res)
 }
 
@@ -164,10 +167,11 @@ func (h *Handler) Put(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Code     string `json:"code"`
-		Enabled  bool   `json:"enabled"`
-		Public   bool   `json:"public"`
-		CronSecs int    `json:"cron_secs"`
+		Code             string `json:"code"`
+		Enabled          bool   `json:"enabled"`
+		Public           bool   `json:"public"`
+		CronSecs         int    `json:"cron_secs"`
+		ExpectedRevision *int64 `json:"expected_revision"`
 	}
 	if httpx.Decode(w, r, &req) != nil {
 		return
@@ -180,7 +184,19 @@ func (h *Handler) Put(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "bad_cron", "cron_secs must be 0 (off) or >= 10")
 		return
 	}
-	fn, err := h.Functions.Upsert(r.Context(), r.PathValue("id"), name, req.Code, req.Enabled, req.Public, req.CronSecs)
+	if req.ExpectedRevision != nil && *req.ExpectedRevision < 0 {
+		httpx.Error(w, 400, "bad_revision", "expected_revision must be nonnegative")
+		return
+	}
+	if _, err := goja.Compile(name, req.Code, false); err != nil {
+		httpx.Error(w, 400, "invalid_code", err.Error())
+		return
+	}
+	fn, err := h.Functions.Save(r.Context(), r.PathValue("id"), name, req.Code, req.Enabled, req.Public, req.CronSecs, req.ExpectedRevision)
+	if errors.Is(err, repo.ErrFunctionConflict) {
+		httpx.Error(w, 409, "revision_conflict", err.Error())
+		return
+	}
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
@@ -220,4 +236,93 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.run(w, r, gameID, fn, req)
+}
+
+// Versions lists the last 50 persisted snapshots without their code bodies.
+func (h *Handler) Versions(w http.ResponseWriter, r *http.Request) {
+	versions, err := h.Functions.Versions(r.Context(), r.PathValue("id"), r.PathValue("name"))
+	if err != nil {
+		httpx.Error(w, 500, "internal", err.Error())
+		return
+	}
+	httpx.JSON(w, 200, map[string]any{"versions": versions})
+}
+
+func functionRevision(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	revision, err := strconv.ParseInt(r.PathValue("revision"), 10, 64)
+	if err != nil || revision < 1 {
+		httpx.Error(w, 400, "bad_revision", "revision must be a positive integer")
+		return 0, false
+	}
+	return revision, true
+}
+
+func (h *Handler) Version(w http.ResponseWriter, r *http.Request) {
+	revision, ok := functionRevision(w, r)
+	if !ok {
+		return
+	}
+	v, err := h.Functions.Version(r.Context(), r.PathValue("id"), r.PathValue("name"), revision)
+	if errors.Is(err, repo.ErrNotFound) {
+		httpx.Error(w, 404, "not_found", "version not found")
+		return
+	}
+	if err != nil {
+		httpx.Error(w, 500, "internal", err.Error())
+		return
+	}
+	httpx.JSON(w, 200, v)
+}
+
+func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
+	revision, ok := functionRevision(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		ExpectedRevision int64 `json:"expected_revision"`
+	}
+	if httpx.Decode(w, r, &req) != nil {
+		return
+	}
+	if req.ExpectedRevision < 1 {
+		httpx.Error(w, 400, "bad_revision", "expected_revision is required")
+		return
+	}
+	f, err := h.Functions.Restore(r.Context(), r.PathValue("id"), r.PathValue("name"), revision, req.ExpectedRevision)
+	if errors.Is(err, repo.ErrNotFound) {
+		httpx.Error(w, 404, "not_found", "version not found")
+		return
+	}
+	if errors.Is(err, repo.ErrFunctionConflict) {
+		httpx.Error(w, 409, "revision_conflict", err.Error())
+		return
+	}
+	if err != nil {
+		httpx.Error(w, 500, "internal", err.Error())
+		return
+	}
+	httpx.JSON(w, 200, f)
+}
+
+// Preview executes an unsaved draft, with the same runtime guardrails and real
+// game-data capabilities as a saved function. No code or settings are published.
+func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Code string `json:"code"`
+		Body any    `json:"body"`
+	}
+	if httpx.Decode(w, r, &req) != nil {
+		return
+	}
+	if len(req.Code) > 256<<10 {
+		httpx.Error(w, 413, "code_too_large", "code exceeds 256KB")
+		return
+	}
+	if _, err := goja.Compile(r.PathValue("name"), req.Code, false); err != nil {
+		httpx.Error(w, 400, "invalid_code", err.Error())
+		return
+	}
+	h.run(w, r, r.PathValue("id"), &repo.CloudFunction{Name: r.PathValue("name"), Code: req.Code},
+		Request{Method: "POST", Body: req.Body, Query: map[string]string{}})
 }

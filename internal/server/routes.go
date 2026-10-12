@@ -196,6 +196,10 @@ func registerAdmin(rt router) {
 	ta("GET /admin/api/games/{id}/functions/{name}", "viewer", tenant.ResourceGame, d.fnH.Get)
 	ta("PUT /admin/api/games/{id}/functions/{name}", "editor", tenant.ResourceGame, d.fnH.Put)
 	ta("DELETE /admin/api/games/{id}/functions/{name}", "editor", tenant.ResourceGame, d.fnH.Delete)
+	ta("GET /admin/api/games/{id}/functions/{name}/versions", "viewer", tenant.ResourceGame, d.fnH.Versions)
+	ta("GET /admin/api/games/{id}/functions/{name}/versions/{revision}", "viewer", tenant.ResourceGame, d.fnH.Version)
+	ta("POST /admin/api/games/{id}/functions/{name}/versions/{revision}/restore", "editor", tenant.ResourceGame, d.fnH.Restore)
+	ta("POST /admin/api/games/{id}/functions/{name}/preview", "editor", tenant.ResourceGame, d.fnH.Preview)
 	ta("POST /admin/api/games/{id}/functions/{name}/test", "editor", tenant.ResourceGame, d.fnH.Test)
 
 	ta("GET /admin/api/games/{id}/webhooks", "viewer", tenant.ResourceGame, d.hooksH.List)

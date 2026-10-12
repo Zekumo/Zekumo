@@ -144,6 +144,8 @@ export interface Announcement {
 }
 
 export interface FunctionResult {
+  /** Persisted function revision used for this invocation (0 for a draft). */
+  revision?: number;
   result: Json;
   logs: string[];
 }

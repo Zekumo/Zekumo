@@ -202,8 +202,9 @@ type Announcement struct {
 // FuncResult is a cloud function's return value plus anything it logged,
 // which is what makes a failing function debuggable from the client.
 type FuncResult struct {
-	Result json.RawMessage `json:"result"`
-	Logs   []string        `json:"logs"`
+	Revision int64           `json:"revision"`
+	Result   json.RawMessage `json:"result"`
+	Logs     []string        `json:"logs"`
 }
 
 // ---------- updates ----------
