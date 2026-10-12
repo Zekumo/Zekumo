@@ -1,0 +1,1090 @@
+{
+  "generated_from": "internal/server/routes.go",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/admin/api/accounts",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/accounts/{id}",
+      "auth": "admin",
+      "minimum_role": "owner",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/achievements/{aid}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/achievements/{aid}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/achievements/{aid}/unlock",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/announcements/{aid}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/announcements/{aid}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/currencies/{cid}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/currencies/{cid}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/exports/{job_id}",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games",
+      "auth": "admin",
+      "minimum_role": "admin",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/games/{id}",
+      "auth": "admin",
+      "minimum_role": "owner",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/achievements",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/achievements",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/announcements",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/announcements",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/bans",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/currencies",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/currencies",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/currency/{cid}/grant",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/dialogues",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/games/{id}/dialogues/{key}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/dialogues/{key}",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/games/{id}/dialogues/{key}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/exports",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/exports",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/games/{id}/friend-limit",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/functions",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/games/{id}/functions/{name}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/functions/{name}",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/games/{id}/functions/{name}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/games/{id}/functions/{name}/draft",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/functions/{name}/draft",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/games/{id}/functions/{name}/draft",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/functions/{name}/preview",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/functions/{name}/publish",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/functions/{name}/schedule",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/functions/{name}/test",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/functions/{name}/versions",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/functions/{name}/versions/{revision}",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/functions/{name}/versions/{revision}/restore",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/games/{id}/http-allowlist",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/kv",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/kv/{namespace}",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/games/{id}/kv/{namespace}/{key}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/kv/{namespace}/{key}",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/games/{id}/kv/{namespace}/{key}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/leaderboards",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/leaderboards/{board}",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/mail",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/mail",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/matches",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/matches",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/matches/{match_id}",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/matches/{match_id}/finish",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/players",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/releases",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/releases",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/games/{id}/releases/{version}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/releases/{version}/artifacts",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/releases/{version}/artifacts",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/releases/{version}/artifacts/{aid}/complete",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/releases/{version}/publish",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/releases/{version}/revoke",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/releases/{version}/rollout",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/rooms",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/games/{id}/sso",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/stats",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/stats/funnel",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/stats/retention",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/games/{id}/webhooks",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/games/{id}/webhooks",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/health",
+      "auth": "admin",
+      "minimum_role": "owner",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/login",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/logs",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/me",
+      "auth": "admin",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/oauth/clients",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/oauth/clients",
+      "auth": "admin",
+      "minimum_role": "admin",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/oauth/clients/{client_id}",
+      "auth": "admin",
+      "minimum_role": "admin",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/oauth/clients/{client_id}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/players/{pid}/ban",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/players/{pid}/currency",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/players/{pid}/currency/{cid}/ledger",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/players/{pid}/data",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/players/{pid}/unban",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/stats",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/webhooks/{wid}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/webhooks/{wid}",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/webhooks/{wid}/deliveries",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/webhooks/{wid}/test",
+      "auth": "admin",
+      "minimum_role": "editor",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/workspaces",
+      "auth": "admin",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/workspaces",
+      "auth": "admin",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/workspaces/{workspace_id}/members",
+      "auth": "admin",
+      "minimum_role": "viewer",
+      "workspace_header": true
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/workspaces/{workspace_id}/members",
+      "auth": "admin",
+      "minimum_role": "admin",
+      "workspace_header": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/workspaces/{workspace_id}/members/{user_id}",
+      "auth": "admin",
+      "minimum_role": "admin",
+      "workspace_header": true
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/api/workspaces/{workspace_id}/members/{user_id}",
+      "auth": "admin",
+      "minimum_role": "admin",
+      "workspace_header": true
+    },
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/oauth/token",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/oauth/userinfo",
+      "auth": "oauth",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/readyz",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/sso/api/authorizations",
+      "auth": "account",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/sso/api/authorizations/{client_id}",
+      "auth": "account",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/sso/api/authorize/info",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/sso/api/login",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/sso/api/me",
+      "auth": "account",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/sso/api/register",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/sso/api/tickets",
+      "auth": "account",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/achievements",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/achievements/unlocked",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/apps/{app_id}/announcements",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/apps/{app_id}/functions/{name}",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/apps/{app_id}/functions/{name}",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/apps/{app_id}/releases",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/apps/{app_id}/updates/check",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/login",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/register",
+      "auth": "public",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/chat/history",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/currency",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/currency/{cid}/ledger",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/currency/{cid}/spend",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/dialogues",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/dialogues/{key}",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/friends",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/friends/accept",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/friends/block",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/friends/blocks",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/friends/blocks/{player_id}",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/friends/decline",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/friends/request",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/friends/requests",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/friends/{player_id}",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/functions/{name}",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/functions/{name}",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/kv/{namespace}",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/kv/{namespace}/{key}",
+      "auth": "server-hmac",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/kv/{namespace}/{key}",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/kv/{namespace}/{key}",
+      "auth": "server-hmac",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/leaderboards/{board}",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/leaderboards/{board}/me",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/leaderboards/{board}/score",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/logs",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/mailbox",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mailbox/{mid}/claim",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mailbox/{mid}/read",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/matches",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/matches/{match_id}",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/player/bind",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/player/data",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/player/data/{key}",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/player/data/{key}",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/player/data/{key}",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/player/profile",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/player/profile",
+      "auth": "player",
+      "minimum_role": "",
+      "workspace_header": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/ws",
+      "auth": "player-websocket",
+      "minimum_role": "",
+      "workspace_header": false
+    }
+  ]
+}

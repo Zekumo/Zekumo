@@ -41,6 +41,14 @@ func (l *Local) PresignDownload(_ context.Context, key, filename string) (string
 	return l.signURL("GET", key, filename), nil
 }
 
+// PresignDownloadTTL supports export links, bounded to at most 24 hours.
+func (l *Local) PresignDownloadTTL(_ context.Context, key, filename string, ttl time.Duration) (string, error) {
+	if ttl < time.Second || ttl > ExportPresignTTL {
+		return "", fmt.Errorf("download TTL must be 1 second to 24 hours")
+	}
+	return l.signURLTTL("GET", key, filename, ttl), nil
+}
+
 func (l *Local) Stat(_ context.Context, key string) (int64, error) {
 	fi, err := os.Stat(l.path(key))
 	if err != nil {
@@ -139,7 +147,11 @@ func (l *Local) path(key string) string {
 }
 
 func (l *Local) signURL(method, key, filename string) string {
-	exp := time.Now().Add(PresignTTL).Unix()
+	return l.signURLTTL(method, key, filename, PresignTTL)
+}
+
+func (l *Local) signURLTTL(method, key, filename string, ttl time.Duration) string {
+	exp := time.Now().Add(ttl).Unix()
 	q := url.Values{}
 	q.Set("key", key)
 	q.Set("exp", strconv.FormatInt(exp, 10))

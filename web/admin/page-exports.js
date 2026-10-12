@@ -30,13 +30,15 @@ let exportTimer = null;                                // this page's poll timer
 // ---------- page ----------
 
 async function renderExports(host) {
+  const ctx = operationContext();
   const { exports: rows } = await api('GET',
-    `/admin/api/games/${state.gameId}/exports`);       // each row is {job, download_url?}
+    `/admin/api/games/${ctx.gameId}/exports`);       // each row is {job, download_url?}
+  if (!contextCurrent(ctx) || !host.isConnected) return;
   const list = rows || [];                             // server sends [] when empty; guard anyway
 
   pageShell(host, {
     title: '数据导出',
-    subtitle: '导出玩家档案、存档、货币流水与成就,满足数据可携带(GDPR)要求。下载链接有效期 24 小时。',
+    subtitle: '导出玩家档案、存档、货币流水与成就,便于数据携带和离线分析。内置存储下载链接有效期 24 小时，实际到期时间见各行。',
     actions: `<button class="btn filled" data-write onclick="newExportDialog()">新建导出</button>`,
     body: list.length ? `<div class="card table-card"><table>
         <thead><tr><th>范围</th><th>格式</th><th>状态</th><th>大小</th><th>提交时间</th><th>耗时</th><th></th></tr></thead>
@@ -54,7 +56,7 @@ async function renderExports(host) {
 // A row answers two questions at once: what was asked for, and can I download
 // it yet. A failed job shows the server's own error text — seeing "storage
 // write failed" is what tells you to go look at the storage config.
-function exportRow({ job, download_url }) {
+function exportRow({ job, download_url, download_expires_at, download_error }) {
   const st = EXPORT_STATUS[job.status] || { text: job.status, badge: '' };
   return `<tr>
     <td><b>${EXPORT_SCOPE[job.scope] || esc(job.scope)}</b>
@@ -66,8 +68,8 @@ function exportRow({ job, download_url }) {
     <td class="dim">${fmtAgo(job.created_at)}</td>
     <td class="dim">${exportDuration(job)}</td>
     <td>${download_url
-      ? `<a class="btn text" href="${esc(download_url)}" download>下载</a>`
-      : ''}</td>
+      ? `<a class="btn text" href="${esc(download_url)}" download rel="noreferrer">下载</a>${download_expires_at ? `<div class="dim">到期 ${esc(fmtTime(download_expires_at))}</div>` : ''}`
+      : download_error ? `<span class="dim">${esc(download_error)}</span>` : ''}</td>
   </tr>`;
 }
 
@@ -103,6 +105,7 @@ function pollExports(list) {
 // The player field appears only for scope=player: leaving a required-looking
 // box on screen that does not apply is the fastest way to get it filled wrong.
 function newExportDialog() {
+  const ctx = operationContext();
   openDialog({
     title: '新建导出',
     body: `<label class="field"><select id="exScope" onchange="toggleExportPlayer()">
@@ -120,11 +123,13 @@ function newExportDialog() {
       const scope = document.getElementById('exScope').value;
       const playerId = dlgVal('exPlayer');
       if (scope === 'player' && !playerId) throw new Error('请输入要导出的玩家 ID');
-      await api('POST', `/admin/api/games/${state.gameId}/exports`, {
+      requireCurrentContext(ctx);
+      await api('POST', `/admin/api/games/${ctx.gameId}/exports`, {
         format: document.getElementById('exFormat').value,
         scope,
         player_id: scope === 'player' ? playerId : undefined,
       });
+      requireCurrentContext(ctx);
       toast('导出任务已提交');
       await route();                                   // new job shows as 排队中 and polling starts
     },

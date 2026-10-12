@@ -3,5 +3,5 @@ package web
 
 import "embed"
 
-//go:embed admin sso oauth site
+//go:embed admin sso oauth site docs
 var FS embed.FS

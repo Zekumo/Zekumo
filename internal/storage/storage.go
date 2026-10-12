@@ -15,6 +15,15 @@ var ErrNotFound = errors.New("object not found")
 // PresignTTL is how long generated upload/download URLs stay valid.
 const PresignTTL = 15 * time.Minute
 
+// ExportPresignTTL is the product-defined lifetime for generated data exports.
+const ExportPresignTTL = 24 * time.Hour
+
+// ExpiringDownloads lets built-in drivers mint purpose-specific download URLs
+// without changing upload/artifact defaults or breaking third-party drivers.
+type ExpiringDownloads interface {
+	PresignDownloadTTL(context.Context, string, string, time.Duration) (string, error)
+}
+
 type Storage interface {
 	// PresignUpload returns a URL the client PUTs the file to.
 	PresignUpload(ctx context.Context, key string) (string, error)

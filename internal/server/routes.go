@@ -306,6 +306,12 @@ func registerPages(rt router) {
 	}
 	rt.Handle("GET /site/", http.StripPrefix("/site/", http.FileServer(http.FS(siteFS))))
 
+	docsFS, err := fs.Sub(web.FS, "docs")
+	if err != nil {
+		log.Fatalf("embed docs: %v", err)
+	}
+	rt.Handle("GET /docs/", http.StripPrefix("/docs/", http.FileServer(http.FS(docsFS))))
+
 	// Hosted pages games redirect players to.
 	rt.HandleFunc("GET /sso/authorize", staticPage("sso/index.html"))
 	rt.HandleFunc("GET /oauth/authorize", staticPage("oauth/index.html"))

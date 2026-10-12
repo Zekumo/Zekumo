@@ -345,10 +345,32 @@ func (h *Handler) filename(job *repo.ExportJob) string {
 func (h *Handler) withURL(ctx context.Context, job *repo.ExportJob) map[string]any {
 	out := map[string]any{"job": job}
 	if job.Status == "done" && job.StorageKey != "" {
-		if url, err := h.Svc.Blob.PresignDownload(ctx, job.StorageKey, h.filename(job)); err == nil {
+		issuedAt := time.Now()
+		ttl := storage.PresignTTL
+		knownExpiry := false
+		var url string
+		var err error
+		if signer, ok := h.Svc.Blob.(storage.ExpiringDownloads); ok {
+			ttl = storage.ExportPresignTTL
+			knownExpiry = true
+			url, err = signer.PresignDownloadTTL(ctx, job.StorageKey, h.filename(job), ttl)
+		} else {
+			// Custom legacy drivers retain their existing default. Its lifetime is
+			// not exposed by Storage, so do not invent expiry metadata.
+			url, err = h.Svc.Blob.PresignDownload(ctx, job.StorageKey, h.filename(job))
+		}
+		if err == nil {
 			out["download_url"] = url
+			out["download_expiry_known"] = knownExpiry
+			if knownExpiry {
+				out["download_expires_at"] = issuedAt.Add(ttl).Truncate(time.Second)
+				out["download_ttl_seconds"] = int64(ttl / time.Second)
+			}
+		} else {
+			out["download_error"] = "download link unavailable; refresh to retry"
 		}
 	}
+
 	return out
 }
 
