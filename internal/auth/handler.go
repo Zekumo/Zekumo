@@ -195,6 +195,7 @@ func (h *Handler) finishLogin(w http.ResponseWriter, r *http.Request, player *re
 	}
 	if h.Stats != nil {
 		h.Stats.RecordLogin(player.GameID)
+		h.Stats.RecordActive(player.GameID, player.ID)
 		if isNew {
 			h.Stats.RecordNewPlayer(player.GameID)
 		}

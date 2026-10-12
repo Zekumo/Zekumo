@@ -69,3 +69,32 @@ func (r *Room) snapshotFor(c *Client) Room {
 	}
 	return out
 }
+
+// RevokePlayer atomically removes active room/queue/channel ownership before
+// closing the socket. Initialization uses the same lock, preventing a racing
+// in-progress upgrade from registering after a local ban notification.
+func (h *Hub) RevokePlayer(gameID, playerID string) {
+	h.blockMu.Lock()
+	defer h.blockMu.Unlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if g := h.games[gameID]; g != nil {
+		if c := g.clients[playerID]; c != nil {
+			h.removeClientLocked(c)
+			c.close(4003, "player banned")
+		}
+	}
+}
+
+// OnlinePlayerIDs is bounded by maxHubClients and contains no room payloads.
+func (h *Hub) OnlinePlayerIDs() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	ids := make([]string, 0)
+	for _, g := range h.games {
+		for id := range g.clients {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}

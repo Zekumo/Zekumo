@@ -111,7 +111,7 @@ function retentionCard(rows) {
   return `<div class="card">
     <div class="card-head">
       <h2>留存率</h2>
-      <span class="dim">按注册日分群 · 近 ${rows.length} 天</span>
+      <span class="dim">按注册日分群 · 精确第 1/7/30 天活跃 · 近 ${rows.length} 天</span>
     </div>
     <div class="tiles compact">
       ${RETENTION_SERIES.map(([key, label]) => {
@@ -119,9 +119,10 @@ function retentionCard(rows) {
         return tile(label,
           latest ? Math.round(latest.rate * 100) + '%' : '—',
           latest ? `${latest.row.date} 注册的 ${fmtNum(latest.row.cohort)} 人`
-                 : '样本还不够,需要更多时间');
+                 : '尚未观测完整，或注册早于日活事实采集');
       }).join('')}
     </div>
+    <p class="dim">采集启用前的分群不伪造历史留存；空白表示尚未完整观测或历史未知。漏斗单独统计第 1–7 天内任意回访。</p>
     ${retentionChart(rows)}
   </div>`;
 }

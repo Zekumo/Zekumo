@@ -13,12 +13,14 @@ const METRICS = {
 const RANGES = [7, 30, 90];
 
 async function renderDashboard(host) {
+  const ctx = operationContext();
   const [stats, errors, health] = await Promise.all([
     api('GET', `/admin/api/stats?days=${chartView.days}`),
     api('GET', '/admin/api/logs?level=error&limit=6'),
     hasRole('owner') ? api('GET', '/admin/api/health') : Promise.resolve(null),
   ]);
 
+  if (!contextCurrent(ctx) || !host.isConnected) return;
   const days = stats.days;
   const yesterday = days[days.length - 2] || { active: 0, logins: 0, new_players: 0 };
   const t = stats.today;
@@ -34,8 +36,8 @@ async function renderDashboard(host) {
         ${tile('当前在线', fmtNum(stats.totals.online), '所有游戏的实时连接')}
         ${tile('今日活跃', fmtNum(t.active), delta(t.active, yesterday.active))}
         ${tile('今日新增', fmtNum(t.new_players), delta(t.new_players, yesterday.new_players))}
-        ${tile('次日留存', pct(r.d1_back, r.d1_cohort),
-               r.d1_cohort ? `昨日新增 ${r.d1_cohort} 人,今日回访 ${r.d1_back} 人` : '昨日没有新增玩家')}
+        ${tile('完整次日留存', r.d1_known ? pct(r.d1_back, r.d1_cohort) : '—',
+               r.d1_known ? `${esc(r.d1_date)} 注册 ${r.d1_cohort} 人，次日活跃 ${r.d1_back} 人` : '尚无完整的日活采集分群')}
       </div>
 
       <div class="card">

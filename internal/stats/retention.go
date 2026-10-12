@@ -10,45 +10,59 @@ import (
 	"zekumo/internal/httpx"
 )
 
-// Retention snapshots are cohort-based: cohort sizes are refreshed for the
-// last 33 days, and each dN column is filled once, when the cohort is old
-// enough for the answer to be final. A dN value counts players of that cohort
-// whose last_login_at moved past their registration day — "came back at least
-// once within N days", measured at the N-day horizon.
+// Retention reports exact calendar-day activity (D1/D7/D30), not cumulative
+// last-login approximations. Cohorts before complete tracking remain unknown.
 type RetentionRow struct {
-	Date   string `json:"date"`
-	Cohort int    `json:"cohort"`
-	D1     *int   `json:"d1"`
-	D7     *int   `json:"d7"`
-	D30    *int   `json:"d30"`
+	Measurement string `json:"measurement"`
+	Date        string `json:"date"`
+	Cohort      int    `json:"cohort"`
+	D1          *int   `json:"d1"`
+	D7          *int   `json:"d7"`
+	D30         *int   `json:"d30"`
 }
 
 func (s *Service) ComputeRetention(ctx context.Context) {
 	tz := s.Loc.String()
-	_, err := s.DB.Exec(ctx,
-		`INSERT INTO retention_daily (game_id, date, cohort)
-		 SELECT game_id, (created_at AT TIME ZONE $1)::date, count(*)
-		 FROM players
-		 WHERE (created_at AT TIME ZONE $1)::date >= ((now() AT TIME ZONE $1)::date - 33)
-		 GROUP BY game_id, (created_at AT TIME ZONE $1)::date
-		 ON CONFLICT (game_id, date) DO UPDATE SET cohort = EXCLUDED.cohort`, tz)
+	if _, err := s.DB.Exec(ctx, `INSERT INTO stats_activity_tracking(timezone) VALUES($1) ON CONFLICT DO NOTHING`, tz); err != nil {
+		log.Printf("stats: tracking initialization failed: %v", err)
+		return
+	}
+	_, err := s.DB.Exec(ctx, `INSERT INTO retention_daily(game_id,date,cohort,measurement,stats_timezone)
+ SELECT p.game_id,(p.created_at AT TIME ZONE $1)::date,count(*),
+ CASE WHEN (p.created_at AT TIME ZONE $1)::date>(SELECT (started_at AT TIME ZONE $1)::date FROM stats_activity_tracking WHERE timezone=$1)
+ THEN 'exact_day' ELSE 'insufficient_history' END,$1
+ FROM players p WHERE (p.created_at AT TIME ZONE $1)::date>=((now() AT TIME ZONE $1)::date-93)
+ GROUP BY p.game_id,(p.created_at AT TIME ZONE $1)::date
+ ON CONFLICT(game_id,date) DO UPDATE SET cohort=EXCLUDED.cohort,measurement=EXCLUDED.measurement,stats_timezone=EXCLUDED.stats_timezone`, tz)
 	if err != nil {
 		log.Printf("stats: retention cohort upsert failed: %v", err)
 		return
 	}
-	for col, minAge := range map[string]int{"d1": 2, "d7": 8, "d30": 31} {
-		_, err := s.DB.Exec(ctx,
-			`UPDATE retention_daily rd SET `+col+` = (
-			   SELECT count(*) FROM players p
-			   WHERE p.game_id = rd.game_id
-			     AND (p.created_at AT TIME ZONE $1)::date = rd.date
-			     AND (p.last_login_at AT TIME ZONE $1)::date > rd.date
-			 )
-			 WHERE rd.`+col+` IS NULL AND rd.date <= ((now() AT TIME ZONE $1)::date - $2::int)`,
-			tz, minAge)
+	for col, day := range map[string]int{"d1": 1, "d7": 7, "d30": 30} {
+		_, err = s.DB.Exec(ctx, `UPDATE retention_daily rd SET `+col+`=(
+   SELECT count(*) FROM players p WHERE p.game_id=rd.game_id
+   AND (p.created_at AT TIME ZONE $1)::date=rd.date
+   AND EXISTS(SELECT 1 FROM player_activity_daily a WHERE a.game_id=p.game_id AND a.player_id=p.id
+    AND a.timezone=$1 AND a.activity_date=rd.date+$2::int))
+   WHERE rd.measurement='exact_day' AND rd.stats_timezone=$1
+   AND rd.date<=((now() AT TIME ZONE $1)::date-($2::int+1))
+   AND rd.date>=((now() AT TIME ZONE $1)::date-93)`, tz, day)
 		if err != nil {
-			log.Printf("stats: retention %s fill failed: %v", col, err)
+			log.Printf("stats: retention %s computation failed: %v", col, err)
 		}
+	}
+	_, err = s.DB.Exec(ctx, `UPDATE retention_daily rd SET returned7=(
+  SELECT count(*) FROM players p WHERE p.game_id=rd.game_id AND (p.created_at AT TIME ZONE $1)::date=rd.date
+  AND EXISTS(SELECT 1 FROM player_activity_daily a WHERE a.game_id=p.game_id AND a.player_id=p.id
+   AND a.timezone=$1 AND a.activity_date BETWEEN rd.date+1 AND rd.date+7))
+  WHERE rd.measurement='exact_day' AND rd.stats_timezone=$1
+  AND rd.date<=((now() AT TIME ZONE $1)::date-8) AND rd.date>=((now() AT TIME ZONE $1)::date-93)`, tz)
+	if err != nil {
+		log.Printf("stats: seven-day return computation failed: %v", err)
+	}
+	// Retain facts long enough for the 90-day console range plus finalization.
+	if _, err = s.DB.Exec(ctx, `DELETE FROM player_activity_daily WHERE activity_date<((now() AT TIME ZONE $1)::date-100)`, tz); err != nil {
+		log.Printf("stats: activity cleanup failed: %v", err)
 	}
 }
 
@@ -72,7 +86,11 @@ func (s *Service) StartRetention(ctx context.Context) {
 
 func (s *Service) RetentionRows(ctx context.Context, gameID string, days int) ([]RetentionRow, error) {
 	rows, err := s.DB.Query(ctx,
-		`SELECT to_char(date, 'YYYY-MM-DD'), cohort, d1, d7, d30
+		`SELECT to_char(date, 'YYYY-MM-DD'), cohort,
+ CASE WHEN measurement='exact_day' AND stats_timezone=$2 THEN d1 END,
+ CASE WHEN measurement='exact_day' AND stats_timezone=$2 THEN d7 END,
+ CASE WHEN measurement='exact_day' AND stats_timezone=$2 THEN d30 END,
+ CASE WHEN stats_timezone=$2 THEN measurement ELSE 'insufficient_history' END
 		 FROM retention_daily
 		 WHERE game_id = $1 AND date >= ((now() AT TIME ZONE $2)::date - ($3::int - 1))
 		 ORDER BY date`,
@@ -84,7 +102,7 @@ func (s *Service) RetentionRows(ctx context.Context, gameID string, days int) ([
 	out := []RetentionRow{}
 	for rows.Next() {
 		var r RetentionRow
-		if err := rows.Scan(&r.Date, &r.Cohort, &r.D1, &r.D7, &r.D30); err != nil {
+		if err := rows.Scan(&r.Date, &r.Cohort, &r.D1, &r.D7, &r.D30, &r.Measurement); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -103,9 +121,9 @@ type FunnelStep struct {
 func (s *Service) Funnel(ctx context.Context, gameID string, days int) ([]FunnelStep, error) {
 	var registered, returned7 int
 	err := s.DB.QueryRow(ctx,
-		`SELECT COALESCE(sum(cohort), 0), COALESCE(sum(d7), 0)
+		`SELECT COALESCE(sum(cohort), 0), COALESCE(sum(returned7), 0)
 		 FROM retention_daily
-		 WHERE game_id = $1 AND d7 IS NOT NULL
+		 WHERE game_id = $1 AND returned7 IS NOT NULL AND measurement='exact_day' AND stats_timezone=$2
 		   AND date >= ((now() AT TIME ZONE $2)::date - ($3::int - 1))`,
 		gameID, s.Loc.String(), days).Scan(&registered, &returned7)
 	if err != nil {
@@ -130,8 +148,10 @@ func (h *Handler) Retention(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"days":     rows,
-		"timezone": h.Svc.Loc.String(),
+		"days":            rows,
+		"timezone":        h.Svc.Loc.String(),
+		"measurement":     "exact_calendar_day",
+		"historical_note": "Cohorts before complete daily tracking have unknown retention; no historical activity was fabricated.",
 	})
 }
 
@@ -147,8 +167,9 @@ func (h *Handler) Funnel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"steps":    steps,
-		"window":   days,
-		"timezone": h.Svc.Loc.String(),
+		"steps":       steps,
+		"window":      days,
+		"timezone":    h.Svc.Loc.String(),
+		"measurement": "returned_within_days_1_to_7",
 	})
 }

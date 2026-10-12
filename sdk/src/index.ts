@@ -698,6 +698,7 @@ export type RealtimeEvent =
   | "close"
   | "reconnecting"
   | "replaced"
+  | "banned"
   | "welcome"
   | "error"
   | "pong"
@@ -721,6 +722,7 @@ export interface RealtimeEventData {
   close: { code?: number; reason?: string };
   reconnecting: { attempt: number; delay: number };
   replaced: Record<string, never>;
+  banned: { reason?: string };
   welcome: { player_id: string; nickname: string };
   error: { code?: string; message?: string };
   "match.queued": MatchTicket;
@@ -751,6 +753,7 @@ export interface RealtimeEventData {
 
 const OPEN = 1;
 const REPLACED_CODE = 1008;
+const BANNED_CODE = 4003;
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_PENDING_REQUESTS = 64;
 const PING_INTERVAL_MS = 25_000;
@@ -873,6 +876,10 @@ export class RealtimeClient {
         if (!settled) {
           settled = true;
           reject(new ZekumoError(0, "ws_closed", e.reason || "connection closed"));
+        }
+        if (e.code === BANNED_CODE) {
+          this.emit("banned", { reason: e.reason });
+          return;
         }
         if (e.code === REPLACED_CODE) {
           this.emit("replaced", {});

@@ -4,7 +4,9 @@ package bans
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -21,16 +23,22 @@ type Emitter interface {
 }
 
 type Service struct {
-	Bans    repo.Bans
-	Players repo.Players
-	RDB     *redis.Client
+	Realtime interface{ RevokePlayer(string, string) }
+	Bans     repo.Bans
+	Players  repo.Players
+	RDB      *redis.Client
 }
 
 func banKey(playerID string) string { return "ban:" + playerID }
 
 func (s *Service) TokenBanned(ctx context.Context, playerID string) bool {
 	n, err := s.RDB.Exists(ctx, banKey(playerID)).Result()
-	return err == nil && n > 0
+	if err == nil {
+		return n > 0
+	}
+	// Redis outages must not turn an existing durable ban into an auth bypass.
+	_, dbErr := s.Bans.Active(ctx, playerID)
+	return !errors.Is(dbErr, repo.ErrNotFound)
 }
 
 func (s *Service) ActiveBan(ctx context.Context, playerID string) *repo.PlayerBan {
@@ -59,6 +67,13 @@ func (s *Service) Ban(ctx context.Context, playerID, reason, operator string, du
 	}
 	_ = s.Players.SetBanned(ctx, playerID, true)
 	_ = s.RDB.Set(ctx, banKey(playerID), reason, ttl).Err()
+	if s.Realtime != nil {
+		s.Realtime.RevokePlayer(p.GameID, playerID)
+	}
+	notice, _ := json.Marshal(map[string]string{"game_id": p.GameID, "player_id": playerID})
+	if err := s.RDB.Publish(ctx, realtimeBanChannel, notice).Err(); err != nil {
+		log.Printf("bans: realtime fanout unavailable: %v", err)
+	}
 	return ban, nil
 }
 
@@ -159,4 +174,62 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"bans": list})
+}
+
+const realtimeBanChannel = "zekumo:realtime:player-bans"
+
+// StartRealtimeNotifications fans durable bans out to already-open sockets on
+// other replicas. It does not distribute rooms or make Pub/Sub durable.
+func (s *Service) StartRealtimeNotifications(ctx context.Context) {
+	if s.RDB == nil || s.Realtime == nil {
+		return
+	}
+	go func() {
+		subscription := s.RDB.Subscribe(ctx, realtimeBanChannel)
+		defer subscription.Close()
+		messages := subscription.Channel(redis.WithChannelSize(256))
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if online, ok := s.Realtime.(interface{ OnlinePlayerIDs() []string }); ok {
+					ids := online.OnlinePlayerIDs()
+					queryCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+					active, err := s.Bans.ActivePlayers(queryCtx, ids)
+					cancel()
+					if err != nil {
+						log.Printf("bans: realtime reconciliation failed: %v", err)
+						continue
+					}
+					for _, ban := range active {
+						s.Realtime.RevokePlayer(ban.GameID, ban.PlayerID)
+					}
+				}
+			case message, ok := <-messages:
+				if !ok {
+					return
+				}
+				if len(message.Payload) > 1024 {
+					continue
+				}
+				var notice struct {
+					GameID   string `json:"game_id"`
+					PlayerID string `json:"player_id"`
+				}
+				if json.Unmarshal([]byte(message.Payload), &notice) != nil || notice.GameID == "" || notice.PlayerID == "" {
+					continue
+				}
+				verifyCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+				ban, err := s.Bans.Active(verifyCtx, notice.PlayerID)
+				cancel()
+				// Ignore stale notices delivered after an unban and cross-game payloads.
+				if err == nil && ban != nil && ban.GameID == notice.GameID {
+					s.Realtime.RevokePlayer(notice.GameID, notice.PlayerID)
+				}
+			}
+		}
+	}()
 }

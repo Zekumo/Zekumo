@@ -128,6 +128,9 @@ type gameSpace struct {
 }
 
 type Hub struct {
+	Bans interface {
+		TokenBanned(context.Context, string) bool
+	}
 	blockMu     sync.Mutex // orders block-cache initialization against local updates
 	Blocks      repo.PlayerBlocks
 	queuedBytes atomic.Int64 // queued and in-flight outbound payload bytes across all clients
@@ -227,6 +230,21 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, entry := range blocks {
 			client.blocked[entry.PlayerID] = struct{}{}
+		}
+	}
+
+	if h.Bans != nil {
+		checkCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		banned := h.Bans.TokenBanned(checkCtx, client.playerID)
+		cancel()
+		if banned {
+			h.mu.Lock()
+			h.games[client.gameID].pending--
+			h.pruneSpaceLocked(client.gameID)
+			h.mu.Unlock()
+			h.blockMu.Unlock()
+			client.close(4003, "player banned")
+			return
 		}
 	}
 

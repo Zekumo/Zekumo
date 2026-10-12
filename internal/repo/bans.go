@@ -69,3 +69,25 @@ func (r Bans) ByGame(ctx context.Context, gameID string, limit, offset int) ([]P
 	}
 	return out, rows.Err()
 }
+
+// ActivePlayers is a bounded reconciliation query for connected clients only.
+func (r Bans) ActivePlayers(ctx context.Context, playerIDs []string) ([]PlayerBan, error) {
+	if len(playerIDs) == 0 {
+		return []PlayerBan{}, nil
+	}
+	rows, err := r.DB.Query(ctx, `SELECT DISTINCT game_id,player_id FROM player_bans
+ WHERE player_id=ANY($1::uuid[]) AND lifted_at IS NULL AND (expires_at IS NULL OR expires_at>now())`, playerIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []PlayerBan{}
+	for rows.Next() {
+		var b PlayerBan
+		if err = rows.Scan(&b.GameID, &b.PlayerID); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}

@@ -45,16 +45,31 @@ func bg() (context.Context, context.CancelFunc) {
 
 // RecordActive marks the player active today (deduplicated via a Redis set).
 func (s *Service) RecordActive(gameID, playerID string) {
+	day := s.dayKey(time.Now())
 	go func() {
 		ctx, cancel := bg()
 		defer cancel()
-		day := s.dayKey(time.Now())
 		k := s.key(gameID, day, "act")
 		pipe := s.RDB.Pipeline()
 		pipe.SAdd(ctx, k, playerID)
 		pipe.Expire(ctx, k, counterTTL)
+		// A short claim limits SQL to the first activity each day and permits retry
+		// after a crash/failure before the durable row is written.
+		marker := s.key(gameID, day, "durable:"+s.Loc.String()+":"+playerID)
+		claim := pipe.SetNX(ctx, marker, "1", 30*time.Second)
 		if _, err := pipe.Exec(ctx); err != nil {
 			log.Printf("stats: record active failed: %v", err)
+			return
+		}
+		if claim.Val() && s.DB != nil {
+			_, err := s.DB.Exec(ctx, `INSERT INTO player_activity_daily(game_id,player_id,timezone,activity_date)
+    SELECT game_id,id,$3,$4::date FROM players WHERE game_id=$1 AND id=$2 ON CONFLICT DO NOTHING`, gameID, playerID, s.Loc.String(), day)
+			if err != nil {
+				_ = s.RDB.Del(ctx, marker).Err()
+				log.Printf("stats: persist daily activity failed: %v", err)
+				return
+			}
+			_ = s.RDB.Expire(ctx, marker, counterTTL).Err()
 		}
 	}()
 }
@@ -229,31 +244,31 @@ type GameStat struct {
 // day-N cohort. For yesterday's cohort the two coincide; for the 7-day cohort
 // it is a return rate, and the console labels it that way.
 type Retention struct {
-	D1Cohort int `json:"d1_cohort"`
-	D1Back   int `json:"d1_back"`
-	D7Cohort int `json:"d7_cohort"`
-	D7Back   int `json:"d7_back"`
+	D1Known  bool   `json:"d1_known"`
+	D7Known  bool   `json:"d7_known"`
+	D1Date   string `json:"d1_date"`
+	D7Date   string `json:"d7_date"`
+	D1Cohort int    `json:"d1_cohort"`
+	D1Back   int    `json:"d1_back"`
+	D7Cohort int    `json:"d7_cohort"`
+	D7Back   int    `json:"d7_back"`
 }
 
-// retention counts, per cohort day, how many of the players first seen that
-// day have logged in again since.
+// Workspace totals use the most recently complete target calendar day.
 func (s *Service) retention(ctx context.Context, workspaceID string) (Retention, error) {
 	var r Retention
 	tz := s.Loc.String()
-	err := s.DB.QueryRow(ctx,
-		`WITH p AS (
-			   SELECT (p0.created_at AT TIME ZONE $1)::date    AS born,
-			          (p0.last_login_at AT TIME ZONE $1)::date AS seen
-			   FROM players p0 JOIN games g ON g.id=p0.game_id
-			   WHERE g.workspace_id=$2
-		 )
-		 SELECT
-		   count(*) FILTER (WHERE born = (now() AT TIME ZONE $1)::date - 1),
-		   count(*) FILTER (WHERE born = (now() AT TIME ZONE $1)::date - 1 AND seen > born),
-		   count(*) FILTER (WHERE born = (now() AT TIME ZONE $1)::date - 7),
-		   count(*) FILTER (WHERE born = (now() AT TIME ZONE $1)::date - 7 AND seen > born)
-			 FROM p`, tz, workspaceID,
-	).Scan(&r.D1Cohort, &r.D1Back, &r.D7Cohort, &r.D7Back)
+	err := s.DB.QueryRow(ctx, `SELECT
+  COALESCE(sum(rd.cohort) FILTER(WHERE rd.date=(now() AT TIME ZONE $1)::date-2 AND rd.d1 IS NOT NULL),0),
+  COALESCE(sum(rd.d1) FILTER(WHERE rd.date=(now() AT TIME ZONE $1)::date-2),0),
+  COALESCE(sum(rd.cohort) FILTER(WHERE rd.date=(now() AT TIME ZONE $1)::date-8 AND rd.d7 IS NOT NULL),0),
+  COALESCE(sum(rd.d7) FILTER(WHERE rd.date=(now() AT TIME ZONE $1)::date-8),0),
+  COALESCE(bool_or(rd.date=(now() AT TIME ZONE $1)::date-2 AND rd.d1 IS NOT NULL),false),
+  COALESCE(bool_or(rd.date=(now() AT TIME ZONE $1)::date-8 AND rd.d7 IS NOT NULL),false),
+  to_char((now() AT TIME ZONE $1)::date-2,'YYYY-MM-DD'),to_char((now() AT TIME ZONE $1)::date-8,'YYYY-MM-DD')
+  FROM retention_daily rd JOIN games g ON g.id=rd.game_id
+  WHERE g.workspace_id=$2 AND rd.measurement='exact_day' AND rd.stats_timezone=$1`, tz, workspaceID).
+		Scan(&r.D1Cohort, &r.D1Back, &r.D7Cohort, &r.D7Back, &r.D1Known, &r.D7Known, &r.D1Date, &r.D7Date)
 	return r, err
 }
 
@@ -412,6 +427,14 @@ func (h *Handler) PlatformStats(w http.ResponseWriter, r *http.Request) {
 
 // GameStats handles GET /admin/api/games/{id}/stats?days=30.
 func (h *Handler) GameStats(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("metric") == "retention" {
+		h.Retention(w, r)
+		return
+	}
+	if r.URL.Query().Get("metric") == "funnel" {
+		h.Funnel(w, r)
+		return
+	}
 	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
 	if days <= 0 || days > 90 {
 		days = 30

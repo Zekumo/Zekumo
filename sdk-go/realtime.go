@@ -55,6 +55,8 @@ const (
 // ErrReplaced is returned by Err after the server closed this connection
 // because the same player connected from somewhere else. It is terminal: the
 // client does not reconnect.
+var ErrBanned = errors.New("zekumo: player is banned")
+
 var ErrReplaced = errors.New("zekumo: connection replaced by a newer one for this player")
 
 // Handler receives one event's payload. data is the raw "data" field, left
@@ -300,6 +302,12 @@ func (r *Realtime) run(session *realtimeSession, conn *websocket.Conn) {
 		if !active {
 			return
 		}
+		if errors.Is(err, ErrBanned) {
+			if r.finish(session, ErrBanned) {
+				r.emit("banned", nil)
+			}
+			return
+		}
 		if errors.Is(err, ErrReplaced) {
 			if r.finish(session, ErrReplaced) {
 				r.emit("replaced", nil)
@@ -353,6 +361,9 @@ func (r *Realtime) readLoop(session *realtimeSession, conn *websocket.Conn) erro
 		if err != nil {
 			// 1008 is the server evicting this connection in favour of a newer
 			// one for the same player.
+			if websocket.IsCloseError(err, 4003) {
+				return ErrBanned
+			}
 			if websocket.IsCloseError(err, websocket.ClosePolicyViolation) {
 				return ErrReplaced
 			}

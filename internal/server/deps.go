@@ -125,6 +125,9 @@ func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob stora
 	chatSvc := chat.NewService(repo.Chat{DB: st.DB}, cfg.BannedWordsFile)
 	hub := realtime.NewHub(chatSvc, issuer)
 	hub.Blocks = repo.PlayerBlocks{DB: st.DB}
+	hub.Bans = bansSvc
+	bansSvc.Realtime = hub
+	bansSvc.StartRealtimeNotifications(ctx)
 
 	matchRecords := repo.Matches{DB: st.DB}
 	achievementsSvc := &achievements.Service{Defs: repo.AchievementDefs{DB: st.DB}, Unlocks: repo.AchievementUnlocks{DB: st.DB}}
