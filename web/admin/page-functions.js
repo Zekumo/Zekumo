@@ -48,31 +48,37 @@ async function openFn(name) {
   window.__fn = name;
   const f = await api('GET', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}`);
   if (!contextCurrent(ctx) || window.__fn !== name) return;
+  const { draft } = await api('GET', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}/draft`);
+  const editor = draft || f;
+  if (!contextCurrent(ctx) || window.__fn !== name) return;
   const host = document.getElementById('fnDetail');
   if (!host) return;
   host.dataset.revision = String(f.revision);
+  host.dataset.draftRevision = String(draft?.revision || 0);
   host.innerHTML = `
     <div class="card-head">
       <h2>${esc(f.name)} · v${f.revision}</h2>
       <span class="dim">更新于 ${fmtAgo(f.updated_at)}</span>
     </div>
     <div class="row">
-      <label class="check"><input type="checkbox" id="fnEnabled" ${f.enabled ? 'checked' : ''}> 启用</label>
-      <label class="check"><input type="checkbox" id="fnPublic" ${f.public ? 'checked' : ''}> 免登录可调</label>
+      <label class="check"><input type="checkbox" id="fnEnabled" ${editor.enabled ? 'checked' : ''}> 启用</label>
+      <label class="check"><input type="checkbox" id="fnPublic" ${editor.public ? 'checked' : ''}> 免登录可调</label>
       <label class="field compact" style="width:170px">
-        <input id="fnCron" type="number" placeholder=" " value="${f.cron_secs}">
+        <input id="fnCron" type="number" placeholder=" " value="${editor.cron_secs}">
         <span class="label">定时(秒,0=关)</span></label>
     </div>
     <label class="field" style="margin-top:16px">
-      <textarea id="fnCode" placeholder=" " style="min-height:300px">${esc(f.code)}</textarea>
+      <textarea id="fnCode" placeholder=" " style="min-height:300px">${esc(editor.code)}</textarea>
       <span class="label">函数代码</span></label>
     <div class="row" style="margin-top:16px">
-      <button class="btn filled" data-write onclick="saveFn('${esc(f.name)}')">保存</button>
+      <button class="btn filled" data-write onclick="saveFn('${esc(f.name)}')">发布当前草稿</button>
+      <button class="btn outlined" data-write onclick="saveFnDraft('${esc(f.name)}')">保存草稿</button>
+      <button class="btn text" data-write onclick="discardFnDraft('${esc(f.name)}')">丢弃草稿</button>
       <button class="btn outlined" data-write onclick="testFn('${esc(f.name)}')">测试草稿</button>
       <button class="btn outlined" onclick="showFnHistory('${esc(f.name)}')">版本历史</button>
       <button class="btn text danger" data-write onclick="deleteFn('${esc(f.name)}')">删除</button>
     </div>
-    <p class="dim">测试草稿不会发布代码，但会读写真实游戏数据。仅最近 50 个版本保留。</p>
+    <p class="dim">${draft ? '已载入共享草稿；线上版本保持不变。' : '尚无已保存草稿。'}测试草稿不会发布代码，但会读写真实游戏数据。仅最近 50 个版本保留。</p>
     <label class="field"><textarea id="fnTestBody">{}</textarea><span class="label">测试请求 JSON</span></label>
     <div id="fnHistory"></div><div id="fnOut"></div>
     <p class="dim" style="margin-top:20px">
@@ -92,15 +98,50 @@ function fnPayload() {
   };
 }
 
+async function persistFnDraft(name, ctx) {
+  const host = document.getElementById('fnDetail');
+  const payload = fnPayload();
+  payload.expected_revision = Number(host.dataset.draftRevision);
+  requireCurrentContext(ctx);
+  const draft = await api('PUT', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}/draft`, payload);
+  requireCurrentContext(ctx);
+  if (window.__fn !== name || !host.isConnected) throw new Error('函数编辑器已切换');
+  host.dataset.draftRevision = String(draft.revision);
+  return draft;
+}
+
+async function saveFnDraft(name) {
+  const ctx = operationContext();
+  try { await persistFnDraft(name,ctx); toast('草稿已保存，尚未发布'); }
+  catch (e) { if (contextCurrent(ctx)) toast(e.message); }
+}
+
 async function saveFn(name) {
   const ctx = operationContext();
+  const expected = Number(document.getElementById('fnDetail').dataset.revision);
   try {
+    const draft = await persistFnDraft(name,ctx);
+    await api('POST', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}/publish`,
+      { expected_revision: expected, draft_revision: draft.revision });
     requireCurrentContext(ctx);
-    await api('PUT', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}`, fnPayload());
-    requireCurrentContext(ctx);
-    toast('已保存');
+    toast('已发布为新版本');
     await route();
-  } catch (e) { toast('保存失败:' + e.message); }
+  } catch (e) { if (contextCurrent(ctx)) toast('发布失败:' + e.message); }
+}
+
+function discardFnDraft(name) {
+  const ctx = operationContext();
+  const expected = Number(document.getElementById('fnDetail').dataset.draftRevision);
+  if (!expected) { toast('没有已保存的草稿'); return; }
+  openDialog({
+    title: '丢弃共享草稿', body: '<p>已保存的草稿将被删除，线上函数保持不变。</p>', confirmText: '丢弃',
+    onConfirm: async () => {
+      requireCurrentContext(ctx);
+      await api('DELETE', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}/draft`, { expected_revision: expected });
+      requireCurrentContext(ctx);
+      await openFn(name);
+    },
+  });
 }
 
 async function testFn(name) {
@@ -138,7 +179,7 @@ function newFnDialog() {
       if (!name) throw new Error('请输入函数名');
       requireCurrentContext(ctx);
       await api('PUT', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}`,
-        { code: SAMPLE_FN, enabled: true, public: false, cron_secs: 0, expected_revision: 0 });
+        { code: SAMPLE_FN, enabled: false, public: false, cron_secs: 0, expected_revision: 0 });
       requireCurrentContext(ctx);
       window.__fn = name;
       toast('已创建');

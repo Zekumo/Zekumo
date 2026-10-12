@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"time"
 
 	"zekumo/internal/auth"
 	"zekumo/internal/httpx"
@@ -64,7 +65,9 @@ func request(w http.ResponseWriter, r *http.Request, player any) (Request, bool)
 }
 
 func (h *Handler) run(w http.ResponseWriter, r *http.Request, gameID string, fn *repo.CloudFunction, req Request) {
+	start := time.Now()
 	res, err := h.Runtime.Execute(r.Context(), gameID, fn, req)
+	h.recordExecution(gameID, fn, start, err)
 	if errors.Is(err, ErrBusy) {
 		w.Header().Set("Retry-After", "1")
 		httpx.Error(w, http.StatusServiceUnavailable, "busy", err.Error())

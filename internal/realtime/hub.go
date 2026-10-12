@@ -91,13 +91,14 @@ type Member struct {
 }
 
 type Room struct {
-	ID         string          `json:"id"`
-	Name       string          `json:"name"`
-	OwnerID    string          `json:"owner_id"`
-	MaxPlayers int             `json:"max_players"`
-	Locked     bool            `json:"locked"`
-	Meta       json.RawMessage `json:"meta,omitempty"`
-	Members    []Member        `json:"members"`
+	SessionState string          `json:"session_state"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	OwnerID      string          `json:"owner_id"`
+	MaxPlayers   int             `json:"max_players"`
+	Locked       bool            `json:"locked"`
+	Meta         json.RawMessage `json:"meta,omitempty"`
+	Members      []Member        `json:"members"`
 
 	members map[string]*Client
 	states  map[string]json.RawMessage
@@ -105,6 +106,7 @@ type Room struct {
 
 func (r *Room) snapshot() Room {
 	out := *r
+	out.SessionState = r.sessionState()
 	out.Members = make([]Member, 0, len(r.members))
 	for id, c := range r.members {
 		out.Members = append(out.Members, Member{PlayerID: id, Nickname: c.nickname, State: r.states[id]})
@@ -258,6 +260,7 @@ func (h *Hub) removeClientLocked(c *Client) {
 			}
 		}
 	}
+	h.cancelMatchLocked(c)
 	h.leaveRoomLocked(c)
 	c.subs = map[string]struct{}{}
 	h.pruneSpaceLocked(c.gameID)
@@ -342,6 +345,7 @@ func (h *Hub) handleRoomCreate(c *Client, data json.RawMessage) {
 		states:     map[string]json.RawMessage{},
 	}
 	g.rooms[room.ID] = room
+	h.cancelMatchLocked(c)
 	c.room = room
 	c.reply("room.created", room.snapshot())
 }
@@ -363,7 +367,7 @@ func (h *Hub) handleRoomJoin(c *Client, data json.RawMessage) {
 		c.sendError("room_not_found", "no room with this id")
 		return
 	}
-	if room.Locked {
+	if room.Locked || room.SessionState == "running" || room.SessionState == "finished" {
 		c.sendError("room_locked", "room is locked")
 		return
 	}
@@ -372,6 +376,7 @@ func (h *Hub) handleRoomJoin(c *Client, data json.RawMessage) {
 		return
 	}
 	room.members[c.playerID] = c
+	h.cancelMatchLocked(c)
 	c.room = room
 	joined := msg("room.member_joined", Member{PlayerID: c.playerID, Nickname: c.nickname})
 	for id, m := range room.members {
@@ -454,6 +459,10 @@ func (h *Hub) handleRoomState(c *Client, data json.RawMessage) {
 	}
 	if c.room == nil {
 		c.sendError("not_in_room", "join a room before sending state")
+		return
+	}
+	if c.room.SessionState == "finished" {
+		c.sendError("invalid_session_state", "session is finished")
 		return
 	}
 	c.room.states[c.playerID] = data
@@ -573,6 +582,16 @@ func (h *Hub) dispatch(c *Client, env Envelope) {
 		return
 	}
 	switch env.Type {
+	case "match.join":
+		h.handleMatchJoin(c, env.Data)
+	case "match.cancel":
+		h.handleMatchCancel(c)
+	case "match.status":
+		h.handleMatchStatus(c)
+	case "room.start":
+		h.handleSession(c, true)
+	case "room.finish":
+		h.handleSession(c, false)
 	case "room.create":
 		h.handleRoomCreate(c, env.Data)
 	case "room.join":

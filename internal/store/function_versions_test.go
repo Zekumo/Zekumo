@@ -57,3 +57,47 @@ func TestFunctionVersionLifecycle(t *testing.T) {
 		t.Fatalf("delete: %v", err)
 	}
 }
+
+func TestFunctionDraftPublishLifecycle(t *testing.T) {
+	db, ctx := isolatedPostgres(t)
+	if err := Migrate(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	g, err := (repo.Games{DB: db}).Create(ctx, "drafts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := repo.Functions{DB: db}
+	live, err := r.Upsert(ctx, g.ID, "hello", "1", true, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err := r.SaveDraft(ctx, g.ID, "hello", repo.FunctionDraft{Code: "2", Enabled: true}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := r.Get(ctx, g.ID, "hello")
+	if err != nil || current.Code != "1" {
+		t.Fatalf("draft changed live: %+v %v", current, err)
+	}
+	if _, err = r.SaveDraft(ctx, g.ID, "hello", repo.FunctionDraft{Code: "3"}, 0); !errors.Is(err, repo.ErrFunctionConflict) {
+		t.Fatalf("draft create conflict: %v", err)
+	}
+	if _, err = r.PublishDraft(ctx, g.ID, "hello", live.Revision, draft.Revision+1); !errors.Is(err, repo.ErrFunctionConflict) {
+		t.Fatalf("publish conflict: %v", err)
+	}
+	published, err := r.PublishDraft(ctx, g.ID, "hello", live.Revision, draft.Revision)
+	if err != nil || published.Code != "2" {
+		t.Fatalf("publish: %+v %v", published, err)
+	}
+	if _, err = r.Draft(ctx, g.ID, "hello"); !errors.Is(err, repo.ErrNotFound) {
+		t.Fatalf("draft still present: %v", err)
+	}
+	if _, err = r.SaveDraft(ctx, g.ID, "hello", repo.FunctionDraft{Code: "stale"}, draft.Revision); !errors.Is(err, repo.ErrFunctionConflict) {
+		t.Fatalf("stale update recreated draft: %v", err)
+	}
+	versions, err := r.Versions(ctx, g.ID, "hello")
+	if err != nil || len(versions) != 2 {
+		t.Fatalf("publication history: %v %v", versions, err)
+	}
+}

@@ -305,11 +305,30 @@ type Member struct {
 
 // Room is the shared state of one realtime room.
 type Room struct {
-	Locked     bool            `json:"locked"`
-	ID         string          `json:"id"`
-	Name       string          `json:"name"`
-	OwnerID    string          `json:"owner_id"`
-	MaxPlayers int             `json:"max_players"`
-	Meta       json.RawMessage `json:"meta,omitempty"`
-	Members    []Member        `json:"members"`
+	SessionState string          `json:"session_state"`
+	Locked       bool            `json:"locked"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	OwnerID      string          `json:"owner_id"`
+	MaxPlayers   int             `json:"max_players"`
+	Meta         json.RawMessage `json:"meta,omitempty"`
+	Members      []Member        `json:"members"`
+}
+
+// MatchTicket is an ephemeral matchmaking reservation; listen for match.found.
+type MatchTicket struct {
+	ID        string    `json:"id"`
+	Pool      string    `json:"pool"`
+	Players   int       `json:"players"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+type MatchStatus struct {
+	Status string       `json:"status"`
+	Ticket *MatchTicket `json:"ticket"`
+	Room   *Room        `json:"room"`
+}
+type MatchFound struct {
+	TicketID string `json:"ticket_id"`
+	Room     Room   `json:"room"`
 }

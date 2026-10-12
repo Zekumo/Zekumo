@@ -34,3 +34,32 @@ types expose it. A draft preview reports revision zero.
 Validation for this slice is intentionally focused: compile checks, JavaScript
 syntax and a PostgreSQL lifecycle sanity test. Comprehensive concurrency, UI,
 migration-upgrade and regression suites have not been run for this slice.
+
+## Persistent shared drafts
+
+Migration 0023 adds one shared draft per function. The console loads this draft
+when present; Save Draft stores code and settings without changing the live
+function or cron runner. Incomplete JavaScript is allowed in drafts. Publish
+validates JavaScript, requires both expected live and draft revisions, and
+atomically writes a new live snapshot and deletes precisely that draft. Concurrent
+editor changes return 409 instead of being lost. New console-created functions
+start disabled. Discard Draft requires the displayed draft revision.
+
+Additional game-scoped admin endpoints:
+- GET `.../functions/{name}/draft`: `{draft: object|null}` (viewer)
+- PUT `.../functions/{name}/draft`: code/settings and `expected_revision`;
+  zero is create-only, positive values update only that draft (editor)
+- DELETE `.../functions/{name}/draft`: `expected_revision` (editor)
+- POST `.../functions/{name}/publish`: `expected_revision` for live code and
+  `draft_revision` for the reviewed draft (editor)
+
+Preview runs the editor buffer, whether or not saved. Existing direct PUT APIs
+still publish immediately for backward compatibility. Saving or restoring a live
+version does not implicitly discard a separately saved draft. Shared drafts are
+not personal workspaces and do not retain their own revision history.
+
+Function invocations now emit bounded structured operational logs containing the
+function name, executed revision, duration, outcome and preview marker. Successful
+publication also logs its function/revision. No request body, return value or
+source code is added to these metadata logs. Existing error logs remain. Inspect
+these through the existing tenant-scoped console logs with source `funcs`.

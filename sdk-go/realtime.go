@@ -573,3 +573,15 @@ func (r *Realtime) TransferRoom(playerID string) error {
 func (r *Realtime) CreateRoomWithOptions(name string, maxPlayers int, meta any, locked bool) error {
 	return r.Send("room.create", map[string]any{"name": name, "max_players": maxPlayers, "meta": meta, "locked": locked})
 }
+
+// JoinMatchmaking queues this connection. Register match.found before sending.
+// Matched rooms are locked; tickets expire after 120 seconds or disconnect.
+func (r *Realtime) JoinMatchmaking(pool string, players int) error {
+	return r.Send("match.join", map[string]any{"pool": pool, "players": players})
+}
+func (r *Realtime) CancelMatchmaking() error { return r.Send("match.cancel", struct{}{}) }
+func (r *Realtime) MatchmakingStatus() error { return r.Send("match.status", struct{}{}) }
+
+// StartSession and FinishSession require ownership of the current room.
+func (r *Realtime) StartSession() error  { return r.Send("room.start", struct{}{}) }
+func (r *Realtime) FinishSession() error { return r.Send("room.finish", struct{}{}) }

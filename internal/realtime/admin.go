@@ -11,12 +11,13 @@ import (
 // AdminRoomSummary deliberately excludes player state, member identities and
 // arbitrary metadata. The console monitor is operational, not a state browser.
 type AdminRoomSummary struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	OwnerID     string `json:"owner_id"`
-	MaxPlayers  int    `json:"max_players"`
-	Locked      bool   `json:"locked"`
-	MemberCount int    `json:"member_count"`
+	SessionState string `json:"session_state"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	OwnerID      string `json:"owner_id"`
+	MaxPlayers   int    `json:"max_players"`
+	Locked       bool   `json:"locked"`
+	MemberCount  int    `json:"member_count"`
 }
 
 // AdminRooms must be registered behind admin authentication and the tenant
@@ -39,10 +40,16 @@ func (h *Hub) AdminRooms(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	rooms := make([]AdminRoomSummary, 0)
 	online := 0
+	queued := 0
 	if g := h.games[r.PathValue("id")]; g != nil {
 		online = len(g.clients)
+		for _, c := range g.clients {
+			if c.match != nil {
+				queued++
+			}
+		}
 		for _, room := range g.rooms {
-			rooms = append(rooms, AdminRoomSummary{ID: room.ID, Name: room.Name, OwnerID: room.OwnerID, MaxPlayers: room.MaxPlayers, Locked: room.Locked, MemberCount: len(room.members)})
+			rooms = append(rooms, AdminRoomSummary{SessionState: room.sessionState(), ID: room.ID, Name: room.Name, OwnerID: room.OwnerID, MaxPlayers: room.MaxPlayers, Locked: room.Locked, MemberCount: len(room.members)})
 		}
 	}
 	h.mu.Unlock()
@@ -58,6 +65,6 @@ func (h *Hub) AdminRooms(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"rooms": rooms[start:end], "total": total, "room_count": total,
-		"online_players": online, "offset": offset, "limit": limit,
+		"online_players": online, "queued_players": queued, "offset": offset, "limit": limit,
 	})
 }

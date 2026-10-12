@@ -214,6 +214,19 @@ export interface RoomSummary {
   meta?: Json;
 }
 
+export interface MatchTicket {
+  id: string;
+  pool: string;
+  players: number;
+  created_at: string;
+  expires_at: string;
+}
+export interface MatchStatus {
+  status: "idle" | "queued" | "in_room";
+  ticket: MatchTicket | null;
+  room: Room | null;
+}
+
 export interface RoomPage {
   rooms: RoomSummary[];
   total: number;
@@ -229,6 +242,7 @@ export interface RoomOptions {
 }
 
 export interface Room {
+  session_state?: "lobby" | "running" | "finished";
   id: string;
   name: string;
   owner_id: string;
@@ -668,6 +682,12 @@ export interface RealtimeEventData {
   replaced: Record<string, never>;
   welcome: { player_id: string; nickname: string };
   error: { code?: string; message?: string };
+  "match.queued": MatchTicket;
+  "match.found": { ticket_id: string; room: Room };
+  "match.expired": { ticket_id: string };
+  "match.cancelled": Record<string, never>;
+  "match.status": MatchStatus;
+  "room.session": Room;
   "room.created": Room;
   "room.joined": Room;
   "room.left": Record<string, never>;
@@ -922,6 +942,23 @@ export class RealtimeClient {
         reject(error);
       }
     });
+  }
+
+  /** Subscribe to match.found before joining; matches can form immediately. */
+  joinMatchmaking(pool: string, players = 2): Promise<MatchTicket> {
+    return this.request("match.join", { pool, players }, "match.queued");
+  }
+  cancelMatchmaking(): Promise<void> {
+    return this.request("match.cancel", {}, "match.cancelled").then(() => undefined);
+  }
+  matchmakingStatus(): Promise<MatchStatus> {
+    return this.request("match.status", {}, "match.status");
+  }
+  startSession(): Promise<Room> {
+    return this.request("room.start", {}, "room.session");
+  }
+  finishSession(): Promise<Room> {
+    return this.request("room.finish", {}, "room.session");
   }
 
   createRoom(opts: RoomOptions = {}): Promise<Room> {

@@ -30,6 +30,10 @@ func (h *Hub) handleRoomUpdate(c *Client, data json.RawMessage) {
 	if r == nil {
 		return
 	}
+	if r.SessionState == "running" || r.SessionState == "finished" {
+		c.sendError("invalid_session_state", "session settings cannot change after start")
+		return
+	}
 	var req updateRoomReq
 	if err := decodeRoomRequest(data, &req); err != nil {
 		c.sendError("bad_json", "room.update requires a valid settings object")
