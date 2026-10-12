@@ -5,6 +5,7 @@ package realtime
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -127,6 +128,8 @@ type gameSpace struct {
 }
 
 type Hub struct {
+	blockMu     sync.Mutex // orders block-cache initialization against local updates
+	Blocks      repo.PlayerBlocks
 	queuedBytes atomic.Int64 // queued and in-flight outbound payload bytes across all clients
 	mu          sync.Mutex
 	games       map[string]*gameSpace
@@ -205,6 +208,28 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		subs:     map[string]struct{}{},
 	}
 
+	// Database reads stay outside the hub mutex. blockMu orders initialization
+	// with mutations so a reconnect cannot install a stale block list afterward.
+	h.blockMu.Lock()
+	client.blocked = map[string]struct{}{}
+	if h.Blocks.DB != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		blocks, loadErr := h.Blocks.List(ctx, client.gameID, client.playerID)
+		cancel()
+		if loadErr != nil {
+			h.mu.Lock()
+			h.games[client.gameID].pending--
+			h.pruneSpaceLocked(client.gameID)
+			h.mu.Unlock()
+			h.blockMu.Unlock()
+			client.close(websocket.CloseTryAgainLater, "block preferences unavailable")
+			return
+		}
+		for _, entry := range blocks {
+			client.blocked[entry.PlayerID] = struct{}{}
+		}
+	}
+
 	h.mu.Lock()
 	g := h.space(client.gameID)
 	if old, ok := g.clients[client.playerID]; ok {
@@ -214,6 +239,7 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	g.clients[client.playerID] = client
 	g.pending--
 	h.mu.Unlock()
+	h.blockMu.Unlock()
 
 	client.enqueue(msg("welcome", map[string]string{
 		"player_id": client.playerID,
@@ -358,7 +384,7 @@ func (h *Hub) handleRoomCreate(c *Client, data json.RawMessage) {
 	g.rooms[room.ID] = room
 	h.cancelMatchLocked(c)
 	c.room = room
-	c.reply("room.created", room.snapshot())
+	c.reply("room.created", room.snapshotFor(c))
 }
 
 func (h *Hub) handleRoomJoin(c *Client, data json.RawMessage) {
@@ -396,7 +422,7 @@ func (h *Hub) handleRoomJoin(c *Client, data json.RawMessage) {
 			m.enqueue(joined)
 		}
 	}
-	c.reply("room.joined", room.snapshot())
+	c.reply("room.joined", room.snapshotFor(c))
 }
 
 func (h *Hub) handleRoomLeave(c *Client) {
@@ -483,7 +509,7 @@ func (h *Hub) handleRoomState(c *Client, data json.RawMessage) {
 		State    json.RawMessage `json:"state"`
 	}{PlayerID: c.playerID, State: data})
 	for id, m := range c.room.members {
-		if id != c.playerID {
+		if id != c.playerID && m.canSee(c.playerID) {
 			m.enqueue(payload)
 		}
 	}
@@ -503,7 +529,7 @@ func (h *Hub) handleRoomMsg(c *Client, data json.RawMessage) {
 		PlayerID string          `json:"player_id"`
 	}{Data: data, PlayerID: c.playerID})
 	for id, m := range c.room.members {
-		if id != c.playerID {
+		if id != c.playerID && m.canSee(c.playerID) {
 			m.enqueue(payload)
 		}
 	}

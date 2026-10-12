@@ -230,6 +230,8 @@ export interface MatchRecord {
 }
 export interface MatchRecordPage { matches: MatchRecord[]; next_before_id: string; }
 
+export interface BlockedPlayer { player_id: string; nickname: string; created_at: string; }
+
 export interface MatchTicket {
   id: string;
   pool: string;
@@ -507,6 +509,14 @@ class FriendsAPI {
 
   remove(playerId: string): Promise<void> {
     return this.http.request("DELETE", `/v1/friends/${encodeURIComponent(playerId)}`);
+  }
+
+  async blocks(): Promise<BlockedPlayer[]> {
+    const res = await this.http.request<{blocks: BlockedPlayer[]}>("GET", "/v1/friends/blocks");
+    return res.blocks;
+  }
+  unblock(playerId: string): Promise<void> {
+    return this.http.request("DELETE", `/v1/friends/blocks/${encodeURIComponent(playerId)}`);
   }
 
   block(targetPlayerId: string): Promise<void> {

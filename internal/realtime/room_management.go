@@ -65,13 +65,12 @@ func (h *Hub) handleRoomUpdate(c *Client, data json.RawMessage) {
 	if req.Locked != nil {
 		r.Locked = *req.Locked
 	}
-	payload := msg("room.updated", r.snapshot())
 	for _, member := range r.members {
 		if member != c {
-			member.enqueue(payload)
+			member.enqueue(msg("room.updated", r.snapshotFor(member)))
 		}
 	}
-	c.reply("room.updated", r.snapshot())
+	c.reply("room.updated", r.snapshotFor(c))
 }
 
 type roomTargetReq struct {
@@ -125,7 +124,7 @@ func (h *Hub) handleRoomTransfer(c *Client, data json.RawMessage) {
 	for _, member := range r.members {
 		member.enqueue(payload)
 	}
-	c.reply("room.transferred", r.snapshot())
+	c.reply("room.transferred", r.snapshotFor(c))
 }
 
 func (h *Hub) handleRoomGet(c *Client, data json.RawMessage) {
@@ -135,6 +134,6 @@ func (h *Hub) handleRoomGet(c *Client, data json.RawMessage) {
 		return
 	}
 	if r := h.managedRoom(c, false); r != nil {
-		c.reply("room.info", r.snapshot())
+		c.reply("room.info", r.snapshotFor(c))
 	}
 }

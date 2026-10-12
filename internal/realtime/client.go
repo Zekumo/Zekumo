@@ -34,9 +34,10 @@ type Client struct {
 	// requestID is set only during synchronous dispatch, protected by hub.mu.
 	requestID string
 
-	match *MatchTicket
-	room  *Room
-	subs  map[string]struct{}
+	blocked map[string]struct{} // protected by hub.mu after registration
+	match   *MatchTicket
+	room    *Room
+	subs    map[string]struct{}
 
 	queuedBytes atomic.Int64
 	sendMu      sync.Mutex

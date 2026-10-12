@@ -285,18 +285,49 @@ func (h *Handler) Block(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusNotFound, "player_not_found", "target player not found")
 		return
 	}
-	// Blocking ends any friendship and clears outstanding request history.
-	if err := h.Svc.Friendships.Remove(r.Context(), claims.GameID, claims.Subject, req.TargetPlayerID); err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+	// The repository atomically removes friendship/request history with the block.
+	if err := h.Svc.Blocks.Block(r.Context(), claims.GameID, claims.Subject, target.ID); err != nil {
+		if errors.Is(err, repo.ErrBlockLimit) {
+			httpx.Error(w, 409, "block_limit", err.Error())
+			return
+		}
+		httpx.Error(w, 500, "internal", "could not save block")
 		return
 	}
-	if err := h.Svc.Requests.DeleteBetween(r.Context(), claims.GameID, claims.Subject, req.TargetPlayerID); err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
-		return
-	}
-	if err := h.Svc.Blocks.Block(r.Context(), claims.GameID, claims.Subject, req.TargetPlayerID); err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
-		return
+	if hub, ok := h.Hub.(interface {
+		SetPlayerBlock(string, string, string, bool)
+	}); ok {
+		hub.SetPlayerBlock(claims.GameID, claims.Subject, target.ID, true)
 	}
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "blocked"})
+}
+
+// Blocks lists this player's persisted outgoing block preferences.
+func (h *Handler) Blocks(w http.ResponseWriter, r *http.Request) {
+	c := auth.ClaimsFrom(r.Context())
+	items, err := h.Svc.Blocks.List(r.Context(), c.GameID, c.Subject)
+	if err != nil {
+		httpx.Error(w, 500, "internal", "could not read block list")
+		return
+	}
+	httpx.JSON(w, 200, map[string]any{"blocks": items, "limit": repo.MaxPlayerBlocks})
+}
+
+func (h *Handler) Unblock(w http.ResponseWriter, r *http.Request) {
+	c := auth.ClaimsFrom(r.Context())
+	target, err := h.Svc.Players.ByID(r.Context(), r.PathValue("player_id"))
+	if err != nil || target.GameID != c.GameID {
+		httpx.Error(w, 404, "player_not_found", "target player not found")
+		return
+	}
+	if err = h.Svc.Blocks.Unblock(r.Context(), c.GameID, c.Subject, target.ID); err != nil {
+		httpx.Error(w, 500, "internal", "could not remove block")
+		return
+	}
+	if hub, ok := h.Hub.(interface {
+		SetPlayerBlock(string, string, string, bool)
+	}); ok {
+		hub.SetPlayerBlock(c.GameID, c.Subject, target.ID, false)
+	}
+	httpx.JSON(w, 200, map[string]bool{"unblocked": true})
 }

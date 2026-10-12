@@ -270,8 +270,8 @@ func (f *FriendsAPI) Remove(ctx context.Context, playerID string) error {
 	return f.c.del(ctx, "/v1/friends/"+esc(playerID), nil)
 }
 
-// Block prevents someone from sending requests and hides room messages from
-// them.
+// Block prevents friend requests and hides that player's room messages and
+// state updates from this player.
 func (f *FriendsAPI) Block(ctx context.Context, targetPlayerID string) error {
 	return f.c.post(ctx, "/v1/friends/block",
 		map[string]any{"target_player_id": targetPlayerID}, nil)
@@ -523,4 +523,15 @@ func (m *MatchesAPI) Get(ctx context.Context, id string) (*MatchRecord, error) {
 	var out MatchRecord
 	err := m.c.get(ctx, "/v1/matches/"+esc(id), &out)
 	return &out, err
+}
+
+func (f *FriendsAPI) Blocks(ctx context.Context) ([]BlockedPlayer, error) {
+	var out struct {
+		Blocks []BlockedPlayer `json:"blocks"`
+	}
+	err := f.c.get(ctx, "/v1/friends/blocks", &out)
+	return out.Blocks, err
+}
+func (f *FriendsAPI) Unblock(ctx context.Context, playerID string) error {
+	return f.c.del(ctx, "/v1/friends/blocks/"+esc(playerID), nil)
 }

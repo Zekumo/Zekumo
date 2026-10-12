@@ -101,7 +101,34 @@ func (h *Hub) handleMatchJoin(c *Client, data json.RawMessage) {
 	if len(candidates) < req.Players {
 		return
 	}
-	candidates = candidates[:req.Players]
+	selected := []*Client{}
+	// Try another oldest seed if a blocked pair would otherwise stall compatible
+	// players behind it. Work stays bounded by the 128-ticket game queue.
+	for seed := 0; seed < len(candidates); seed++ {
+		selected = selected[:0]
+		for _, candidate := range candidates[seed:] {
+			compatible := true
+			for _, peer := range selected {
+				if !candidate.canSee(peer.playerID) || !peer.canSee(candidate.playerID) {
+					compatible = false
+					break
+				}
+			}
+			if compatible {
+				selected = append(selected, candidate)
+			}
+			if len(selected) == req.Players {
+				break
+			}
+		}
+		if len(selected) == req.Players {
+			break
+		}
+	}
+	if len(selected) < req.Players {
+		return
+	}
+	candidates = selected
 	room := &Room{RequireReady: true, MinPlayers: req.Players, ID: randomID("r_"), Name: req.Pool, OwnerID: candidates[0].playerID, MaxPlayers: req.Players, Locked: true,
 		members: map[string]*Client{}, states: map[string]json.RawMessage{}, SessionState: "lobby"}
 	g.rooms[room.ID] = room
@@ -109,11 +136,10 @@ func (h *Hub) handleMatchJoin(c *Client, data json.RawMessage) {
 		room.members[peer.playerID] = peer
 		peer.room = room
 	}
-	snapshot := room.snapshot()
 	for _, peer := range candidates {
 		id := peer.match.ID
 		h.cancelMatchLocked(peer)
-		peer.enqueue(msg("match.found", map[string]any{"ticket_id": id, "room": snapshot}))
+		peer.enqueue(msg("match.found", map[string]any{"ticket_id": id, "room": room.snapshotFor(peer)}))
 	}
 }
 
@@ -130,7 +156,7 @@ func (h *Hub) handleMatchStatus(c *Client) {
 	var room *Room
 	if c.room != nil {
 		status = "in_room"
-		snapshot := c.room.snapshot()
+		snapshot := c.room.snapshotFor(c)
 		room = &snapshot
 	}
 	c.reply("match.status", map[string]any{"status": status, "ticket": c.match, "room": room})
@@ -173,13 +199,12 @@ func (h *Hub) handleSession(c *Client, start bool) {
 		}
 		room.SessionState = "finished"
 	}
-	snapshot := room.snapshot()
 	for _, peer := range room.members {
 		if peer != c {
-			peer.enqueue(msg("room.session", snapshot))
+			peer.enqueue(msg("room.session", room.snapshotFor(peer)))
 		}
 	}
-	c.reply("room.session", snapshot)
+	c.reply("room.session", room.snapshotFor(c))
 }
 
 func (r *Room) sessionState() string {
@@ -210,13 +235,12 @@ func (h *Hub) handleReady(c *Client, data json.RawMessage) {
 		room.ready = map[string]bool{}
 	}
 	room.ready[c.playerID] = *req.Ready
-	snapshot := room.snapshot()
 	for _, peer := range room.members {
 		if peer != c {
-			peer.enqueue(msg("room.ready", snapshot))
+			peer.enqueue(msg("room.ready", room.snapshotFor(peer)))
 		}
 	}
-	c.reply("room.ready", snapshot)
+	c.reply("room.ready", room.snapshotFor(c))
 }
 
 func (r *Room) readyCount() int {

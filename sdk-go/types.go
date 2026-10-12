@@ -354,3 +354,9 @@ type MatchRecordPage struct {
 	Matches      []MatchRecord `json:"matches"`
 	NextBeforeID string        `json:"next_before_id"`
 }
+
+type BlockedPlayer struct {
+	PlayerID  string    `json:"player_id"`
+	Nickname  string    `json:"nickname"`
+	CreatedAt time.Time `json:"created_at"`
+}

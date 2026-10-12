@@ -227,12 +227,71 @@ func (r Friendships) Count(ctx context.Context, gameID, playerID string) (int, e
 
 type PlayerBlocks struct{ DB *pgxpool.Pool }
 
+const MaxPlayerBlocks = 1024
+
+var ErrBlockLimit = errors.New("player block limit reached")
+
 func (r PlayerBlocks) Block(ctx context.Context, gameID, blockerID, blockedID string) error {
-	_, err := r.DB.Exec(ctx,
-		`INSERT INTO player_blocks (game_id, blocker_id, blocked_id) VALUES ($1, $2, $3)
-		 ON CONFLICT DO NOTHING`,
-		gameID, blockerID, blockedID)
-	return err
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('blocks:' || $1 || ':' || $2,0))`, gameID, blockerID); err != nil {
+		return err
+	}
+	var count int
+	var exists bool
+	if err = tx.QueryRow(ctx, `SELECT count(*),COALESCE(bool_or(blocked_id=$3),false) FROM player_blocks WHERE game_id=$1 AND blocker_id=$2`, gameID, blockerID, blockedID).Scan(&count, &exists); err != nil {
+		return err
+	}
+	if !exists && count >= MaxPlayerBlocks {
+		return ErrBlockLimit
+	}
+	tag, err := tx.Exec(ctx, `INSERT INTO player_blocks(game_id,blocker_id,blocked_id)
+ SELECT $1,a.id,b.id FROM players a JOIN players b ON a.game_id=b.game_id
+ WHERE a.game_id=$1 AND a.id=$2 AND b.id=$3 AND a.id<>b.id ON CONFLICT DO NOTHING`, gameID, blockerID, blockedID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 && !exists {
+		return ErrNotFound
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM friendships WHERE game_id=$1 AND player_a=LEAST($2::uuid,$3::uuid) AND player_b=GREATEST($2::uuid,$3::uuid)`, gameID, blockerID, blockedID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM friend_requests WHERE game_id=$1 AND ((from_id=$2 AND to_id=$3) OR (from_id=$3 AND to_id=$2))`, gameID, blockerID, blockedID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+type BlockedPlayer struct {
+	PlayerID  string    `json:"player_id"`
+	Nickname  string    `json:"nickname"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (r PlayerBlocks) List(ctx context.Context, gameID, playerID string) ([]BlockedPlayer, error) {
+	rows, err := r.DB.Query(ctx, `SELECT b.blocked_id,p.nickname,b.created_at FROM player_blocks b
+ JOIN players p ON p.id=b.blocked_id AND p.game_id=b.game_id
+ WHERE b.game_id=$1 AND b.blocker_id=$2 ORDER BY b.created_at DESC LIMIT $3`, gameID, playerID, MaxPlayerBlocks+1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []BlockedPlayer{}
+	for rows.Next() {
+		var b BlockedPlayer
+		if err = rows.Scan(&b.PlayerID, &b.Nickname, &b.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	if len(out) > MaxPlayerBlocks {
+		return nil, ErrBlockLimit
+	}
+	return out, rows.Err()
 }
 
 func (r PlayerBlocks) Unblock(ctx context.Context, gameID, blockerID, blockedID string) error {
