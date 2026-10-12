@@ -102,7 +102,7 @@ func (h *Hub) handleMatchJoin(c *Client, data json.RawMessage) {
 		return
 	}
 	candidates = candidates[:req.Players]
-	room := &Room{ID: randomID("r_"), Name: req.Pool, OwnerID: candidates[0].playerID, MaxPlayers: req.Players, Locked: true,
+	room := &Room{RequireReady: true, MinPlayers: req.Players, ID: randomID("r_"), Name: req.Pool, OwnerID: candidates[0].playerID, MaxPlayers: req.Players, Locked: true,
 		members: map[string]*Client{}, states: map[string]json.RawMessage{}, SessionState: "lobby"}
 	g.rooms[room.ID] = room
 	for _, peer := range candidates {
@@ -152,6 +152,18 @@ func (h *Hub) handleSession(c *Client, start bool) {
 			c.sendError("invalid_session_state", "only lobby sessions can start")
 			return
 		}
+		if len(room.members) < room.MinPlayers {
+			c.sendError("not_enough_players", "room has fewer than its minimum players")
+			return
+		}
+		if room.RequireReady {
+			for id := range room.members {
+				if !room.ready[id] {
+					c.sendError("players_not_ready", "every current member must mark ready")
+					return
+				}
+			}
+		}
 		room.SessionState = "running"
 		room.Locked = true
 	} else {
@@ -175,4 +187,44 @@ func (r *Room) sessionState() string {
 		return "lobby"
 	}
 	return r.SessionState
+}
+
+// handleReady changes only the calling player's readiness in a lobby.
+func (h *Hub) handleReady(c *Client, data json.RawMessage) {
+	room := h.managedRoom(c, false)
+	if room == nil {
+		return
+	}
+	if room.sessionState() != "lobby" {
+		c.sendError("invalid_session_state", "readiness can only change in a lobby")
+		return
+	}
+	var req struct {
+		Ready *bool `json:"ready"`
+	}
+	if err := decodeRoomRequest(data, &req); err != nil || req.Ready == nil {
+		c.sendError("bad_request", "ready must be a boolean")
+		return
+	}
+	if room.ready == nil {
+		room.ready = map[string]bool{}
+	}
+	room.ready[c.playerID] = *req.Ready
+	snapshot := room.snapshot()
+	for _, peer := range room.members {
+		if peer != c {
+			peer.enqueue(msg("room.ready", snapshot))
+		}
+	}
+	c.reply("room.ready", snapshot)
+}
+
+func (r *Room) readyCount() int {
+	count := 0
+	for id := range r.members {
+		if r.ready[id] {
+			count++
+		}
+	}
+	return count
 }

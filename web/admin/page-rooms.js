@@ -20,7 +20,7 @@ async function renderRooms(host) {
         body: `<div class="card"><div class="card-head"><h2>当前连接</h2><span>${fmtNum(data.online_players)} 位在线玩家 · ${fmtNum(data.room_count)} 个房间 · ${fmtNum(data.queued_players || 0)} 位匹配中</span></div></div>
           ${rooms.length ? `<div class="card table-card"><table><thead><tr><th>房间</th><th>房主</th><th>人数</th><th>加入状态</th></tr></thead><tbody>${rooms.map(room => `<tr>
             <td><b>${esc(room.name) || '(未命名)'}</b><div class="dim"><code>${esc(room.id)}</code></div></td>
-            <td><code>${esc(room.owner_id)}</code></td><td>${fmtNum(room.member_count)} / ${fmtNum(room.max_players)}</td>
+            <td><code>${esc(room.owner_id)}</code></td><td>${fmtNum(room.member_count)} / ${fmtNum(room.max_players)}${room.require_ready ? `<div class="dim">${fmtNum(room.ready_count)} 已就绪 · 最少 ${fmtNum(room.min_players || 1)} 人</div>` : ''}</td>
             <td><span class="badge">${esc(room.session_state || "lobby")} · ${room.locked ? '已锁定' : room.member_count >= room.max_players ? '已满员' : '可加入'}</span></td>
           </tr>`).join('')}</tbody></table></div>` : emptyState('☁️', '没有可显示的房间', '玩家通过 SDK 创建房间后会显示在这里。房间为空后自动移除。')}
           <div class="row"><button class="btn text" data-room-prev ${offset <= 0 ? 'disabled' : ''}>上一页</button>

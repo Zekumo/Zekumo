@@ -235,6 +235,8 @@ export interface RoomPage {
 }
 
 export interface RoomOptions {
+  requireReady?: boolean;
+  minPlayers?: number;
   name?: string;
   maxPlayers?: number;
   meta?: Json;
@@ -242,6 +244,8 @@ export interface RoomOptions {
 }
 
 export interface Room {
+  require_ready?: boolean;
+  min_players?: number;
   session_state?: "lobby" | "running" | "finished";
   id: string;
   name: string;
@@ -249,7 +253,7 @@ export interface Room {
   max_players: number;
   meta?: Json;
   locked: boolean;
-  members: Array<{ player_id: string; nickname: string; state?: Json }>;
+  members: Array<{ player_id: string; nickname: string; ready?: boolean; state?: Json }>;
 }
 
 export class ZekumoError extends Error {
@@ -688,6 +692,7 @@ export interface RealtimeEventData {
   "match.cancelled": Record<string, never>;
   "match.status": MatchStatus;
   "room.session": Room;
+  "room.ready": Room;
   "room.created": Room;
   "room.joined": Room;
   "room.left": Record<string, never>;
@@ -954,6 +959,9 @@ export class RealtimeClient {
   matchmakingStatus(): Promise<MatchStatus> {
     return this.request("match.status", {}, "match.status");
   }
+  setReady(ready: boolean): Promise<Room> {
+    return this.request("room.ready", { ready }, "room.ready");
+  }
   startSession(): Promise<Room> {
     return this.request("room.start", {}, "room.session");
   }
@@ -962,7 +970,7 @@ export class RealtimeClient {
   }
 
   createRoom(opts: RoomOptions = {}): Promise<Room> {
-    return this.request("room.create", { name: opts.name, max_players: opts.maxPlayers, meta: opts.meta, locked: opts.locked }, "room.created");
+    return this.request("room.create", { require_ready:opts.requireReady,min_players:opts.minPlayers,name: opts.name, max_players: opts.maxPlayers, meta: opts.meta, locked: opts.locked }, "room.created");
   }
 
   joinRoom(roomId: string): Promise<Room> {

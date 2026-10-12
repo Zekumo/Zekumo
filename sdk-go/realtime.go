@@ -585,3 +585,22 @@ func (r *Realtime) MatchmakingStatus() error { return r.Send("match.status", str
 // StartSession and FinishSession require ownership of the current room.
 func (r *Realtime) StartSession() error  { return r.Send("room.start", struct{}{}) }
 func (r *Realtime) FinishSession() error { return r.Send("room.finish", struct{}{}) }
+
+// SetReady marks this player ready/unready in a lobby. Membership changes reset readiness.
+func (r *Realtime) SetReady(ready bool) error {
+	return r.Send("room.ready", map[string]bool{"ready": ready})
+}
+
+// RoomCreateOptions includes optional lobby readiness and minimum-player gates.
+type RoomCreateOptions struct {
+	Name         string `json:"name"`
+	MaxPlayers   int    `json:"max_players"`
+	Meta         any    `json:"meta,omitempty"`
+	Locked       bool   `json:"locked"`
+	RequireReady bool   `json:"require_ready"`
+	MinPlayers   int    `json:"min_players"`
+}
+
+func (r *Realtime) CreateSessionRoom(opts RoomCreateOptions) error {
+	return r.Send("room.create", opts)
+}

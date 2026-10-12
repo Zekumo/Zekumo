@@ -17,7 +17,7 @@ async function renderFunctions(host) {
 
   pageShell(host, {
     title: '云函数',
-    subtitle: '服务端 JS(goja 沙箱,10 秒上限)。全局有 request 与 mc.kv / mc.playerdata / mc.players / mc.leaderboard / mc.http。',
+    subtitle: '服务端 JS(goja 沙箱,10 秒上限)。全局有 request 与 mc.kv / mc.playerdata / mc.players / mc.leaderboard / mc.currency / mc.achievements / mc.http。',
     actions: `<button class="btn filled" data-write onclick="newFnDialog()">新建函数</button>`,
     body: functions.length ? `
       <div class="master-detail">
@@ -81,6 +81,7 @@ async function openFn(name) {
       <button class="btn text danger" data-write onclick="deleteFn('${esc(f.name)}')">删除</button>
     </div>
     <p class="dim">${draft ? '已载入共享草稿；线上版本保持不变。' : '尚无已保存草稿。'}测试草稿不会发布代码，但会读写真实游戏数据。仅最近 50 个版本保留。</p>
+    <label class="field"><input id="fnTestPlayer" placeholder=" "><span class="label">测试玩家 ID（可选，仅当前游戏）</span></label>
     <label class="field"><textarea id="fnTestBody">{}</textarea><span class="label">测试请求 JSON</span></label>
     <p class="dim">${schedule ? `下次计划 ${esc(fmtTime(schedule.next_run_at))} · 已调度 ${fmtNum(schedule.dispatch_count)} 次${schedule.last_dispatched_at ? ` · 最近调度 ${esc(fmtTime(schedule.last_dispatched_at))}` : ''}` : '定时调度未开启'}</p>
     <div id="fnHistory"></div><div id="fnOut"></div>
@@ -154,8 +155,9 @@ async function testFn(name) {
   try {
     const body = JSON.parse(document.getElementById('fnTestBody').value);
     const code = document.getElementById('fnCode').value;
+    const player_id = document.getElementById('fnTestPlayer').value.trim();
     requireCurrentContext(ctx);
-    const res = await api('POST', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}/preview`, { code, body });
+    const res = await api('POST', `/admin/api/games/${ctx.gameId}/functions/${encodeURIComponent(name)}/preview`, { code, body, player_id });
     requireCurrentContext(ctx);
     if (window.__fn !== name || !out.isConnected) return;
     out.innerHTML = `

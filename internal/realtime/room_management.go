@@ -44,7 +44,7 @@ func (h *Hub) handleRoomUpdate(c *Client, data json.RawMessage) {
 		c.sendError("invalid_name", "room name exceeds 128 bytes")
 		return
 	}
-	if req.MaxPlayers != nil && (*req.MaxPlayers < 1 || *req.MaxPlayers > maxRoomPlayers || *req.MaxPlayers < len(r.members)) {
+	if req.MaxPlayers != nil && (*req.MaxPlayers < 1 || *req.MaxPlayers > maxRoomPlayers || *req.MaxPlayers < len(r.members) || *req.MaxPlayers < r.MinPlayers) {
 		c.sendError("invalid_max_players", "max_players must be 1 to 200 and at least the current member count")
 		return
 	}

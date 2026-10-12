@@ -11,6 +11,9 @@ import (
 // AdminRoomSummary deliberately excludes player state, member identities and
 // arbitrary metadata. The console monitor is operational, not a state browser.
 type AdminRoomSummary struct {
+	ReadyCount   int    `json:"ready_count"`
+	RequireReady bool   `json:"require_ready"`
+	MinPlayers   int    `json:"min_players"`
 	SessionState string `json:"session_state"`
 	ID           string `json:"id"`
 	Name         string `json:"name"`
@@ -49,7 +52,7 @@ func (h *Hub) AdminRooms(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		for _, room := range g.rooms {
-			rooms = append(rooms, AdminRoomSummary{SessionState: room.sessionState(), ID: room.ID, Name: room.Name, OwnerID: room.OwnerID, MaxPlayers: room.MaxPlayers, Locked: room.Locked, MemberCount: len(room.members)})
+			rooms = append(rooms, AdminRoomSummary{ReadyCount: room.readyCount(), RequireReady: room.RequireReady, MinPlayers: room.MinPlayers, SessionState: room.sessionState(), ID: room.ID, Name: room.Name, OwnerID: room.OwnerID, MaxPlayers: room.MaxPlayers, Locked: room.Locked, MemberCount: len(room.members)})
 		}
 	}
 	h.mu.Unlock()

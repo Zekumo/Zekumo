@@ -298,6 +298,7 @@ type KVKey struct {
 
 // Member is one player in a room, with whatever state they last synced.
 type Member struct {
+	Ready    bool            `json:"ready"`
 	PlayerID string          `json:"player_id"`
 	Nickname string          `json:"nickname"`
 	State    json.RawMessage `json:"state,omitempty"`
@@ -305,6 +306,8 @@ type Member struct {
 
 // Room is the shared state of one realtime room.
 type Room struct {
+	RequireReady bool            `json:"require_ready"`
+	MinPlayers   int             `json:"min_players"`
 	SessionState string          `json:"session_state"`
 	Locked       bool            `json:"locked"`
 	ID           string          `json:"id"`

@@ -85,12 +85,16 @@ func correlatedMsg(typ string, data any, requestID string) []byte {
 }
 
 type Member struct {
+	Ready    bool            `json:"ready"`
 	PlayerID string          `json:"player_id"`
 	Nickname string          `json:"nickname"`
 	State    json.RawMessage `json:"state,omitempty"`
 }
 
 type Room struct {
+	RequireReady bool `json:"require_ready"`
+	MinPlayers   int  `json:"min_players"`
+	ready        map[string]bool
 	SessionState string          `json:"session_state"`
 	ID           string          `json:"id"`
 	Name         string          `json:"name"`
@@ -109,7 +113,7 @@ func (r *Room) snapshot() Room {
 	out.SessionState = r.sessionState()
 	out.Members = make([]Member, 0, len(r.members))
 	for id, c := range r.members {
-		out.Members = append(out.Members, Member{PlayerID: id, Nickname: c.nickname, State: r.states[id]})
+		out.Members = append(out.Members, Member{PlayerID: id, Nickname: c.nickname, State: r.states[id], Ready: r.ready[id]})
 	}
 	return out
 }
@@ -277,6 +281,10 @@ func (h *Hub) leaveRoomLocked(c *Client) {
 	}
 	delete(room.members, c.playerID)
 	delete(room.states, c.playerID)
+	delete(room.ready, c.playerID)
+	if room.sessionState() == "lobby" {
+		room.ready = nil
+	}
 	g := h.space(c.gameID)
 	if len(room.members) == 0 {
 		delete(g.rooms, room.ID)
@@ -306,10 +314,12 @@ func randomID(prefix string) string {
 // --- message handlers, all called with h.mu held ---
 
 type createRoomReq struct {
-	Locked     bool            `json:"locked"`
-	Name       string          `json:"name"`
-	MaxPlayers int             `json:"max_players"`
-	Meta       json.RawMessage `json:"meta"`
+	RequireReady bool            `json:"require_ready"`
+	MinPlayers   int             `json:"min_players"`
+	Locked       bool            `json:"locked"`
+	Name         string          `json:"name"`
+	MaxPlayers   int             `json:"max_players"`
+	Meta         json.RawMessage `json:"meta"`
 }
 
 func (h *Hub) handleRoomCreate(c *Client, data json.RawMessage) {
@@ -325,7 +335,7 @@ func (h *Hub) handleRoomCreate(c *Client, data json.RawMessage) {
 	if req.MaxPlayers == 0 {
 		req.MaxPlayers = 20
 	}
-	if req.MaxPlayers < 1 || req.MaxPlayers > maxRoomPlayers || len(req.Name) > maxRoomNameBytes || len(req.Meta) > maxRoomMetaBytes {
+	if req.MinPlayers < 0 || req.MinPlayers > req.MaxPlayers || req.MaxPlayers < 1 || req.MaxPlayers > maxRoomPlayers || len(req.Name) > maxRoomNameBytes || len(req.Meta) > maxRoomMetaBytes {
 		c.sendError("bad_request", "room limits: name 128 bytes, metadata 8 KiB, capacity 1..200")
 		return
 	}
@@ -335,6 +345,7 @@ func (h *Hub) handleRoomCreate(c *Client, data json.RawMessage) {
 		return
 	}
 	room := &Room{
+		RequireReady: req.RequireReady, MinPlayers: req.MinPlayers,
 		ID:         randomID("r_"),
 		Name:       req.Name,
 		Locked:     req.Locked,
@@ -376,6 +387,7 @@ func (h *Hub) handleRoomJoin(c *Client, data json.RawMessage) {
 		return
 	}
 	room.members[c.playerID] = c
+	room.ready = nil
 	h.cancelMatchLocked(c)
 	c.room = room
 	joined := msg("room.member_joined", Member{PlayerID: c.playerID, Nickname: c.nickname})
@@ -588,6 +600,8 @@ func (h *Hub) dispatch(c *Client, env Envelope) {
 		h.handleMatchCancel(c)
 	case "match.status":
 		h.handleMatchStatus(c)
+	case "room.ready":
+		h.handleReady(c, env.Data)
 	case "room.start":
 		h.handleSession(c, true)
 	case "room.finish":

@@ -123,10 +123,11 @@ func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob stora
 	chatSvc := chat.NewService(repo.Chat{DB: st.DB}, cfg.BannedWordsFile)
 	hub := realtime.NewHub(chatSvc, issuer)
 
+	achievementsSvc := &achievements.Service{Defs: repo.AchievementDefs{DB: st.DB}, Unlocks: repo.AchievementUnlocks{DB: st.DB}}
 	lbSvc := &leaderboard.Service{RDB: st.RDB, Scores: repo.Scores{DB: st.DB}, Players: players}
 	fnRuntime := &funcs.Runtime{
 		GameData: repo.GameData{DB: st.DB}, PlayerData: data, Players: players, Games: games,
-		Leaderboard: lbSvc, Currency: currencySvc,
+		Leaderboard: lbSvc, Currency: currencySvc, Achievements: achievementsSvc, Events: bus,
 		AllowPrivateHTTP: cfg.FuncHTTPAllowPrivate, Logs: logSvc,
 	}
 	fnHandler := &funcs.Handler{
@@ -188,10 +189,7 @@ func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob stora
 			Hub: hub,
 		},
 		achievementsH: &achievements.Handler{
-			Svc: &achievements.Service{
-				Defs:    repo.AchievementDefs{DB: st.DB},
-				Unlocks: repo.AchievementUnlocks{DB: st.DB},
-			},
+			Svc:    achievementsSvc,
 			Events: bus,
 		},
 		announcementsH: &announcements.Handler{Repo: repo.Announcements{DB: st.DB}},

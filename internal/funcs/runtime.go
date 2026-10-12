@@ -13,6 +13,7 @@ import (
 
 	"github.com/dop251/goja"
 
+	"zekumo/internal/achievements"
 	"zekumo/internal/currency"
 	"zekumo/internal/leaderboard"
 	"zekumo/internal/repo"
@@ -25,12 +26,14 @@ const (
 )
 
 type Runtime struct {
-	GameData    repo.GameData
-	PlayerData  repo.PlayerData
-	Players     repo.Players
-	Games       repo.Games
-	Leaderboard *leaderboard.Service
-	Currency    *currency.Service
+	GameData     repo.GameData
+	PlayerData   repo.PlayerData
+	Players      repo.Players
+	Games        repo.Games
+	Leaderboard  *leaderboard.Service
+	Currency     *currency.Service
+	Achievements *achievements.Service
+	Events       achievements.Emitter
 
 	// AllowPrivateHTTP disables the private-address SSRF guard for
 	// mc.http.fetch — local development only.
@@ -276,9 +279,30 @@ func (rt *Runtime) Execute(ctx context.Context, gameID string, fn *repo.CloudFun
 		return map[string]any{"balance": balance, "duplicate": duplicate}
 	})
 
+	achievementObj := vm.NewObject()
+	setAchievement := func(playerID, key string, progress *int) any {
+		if rt.Achievements == nil {
+			throw(errors.New("achievements API is not available"))
+		}
+		if progress != nil && *progress < 0 {
+			throw(errors.New("progress must be nonnegative"))
+		}
+		unlock, err := rt.Achievements.SetByKey(ctx, gameID, playerID, key, progress, rt.Events)
+		if errors.Is(err, repo.ErrNotFound) {
+			throw(errors.New("no such achievement or player in this game"))
+		}
+		if err != nil {
+			throwInternal(err)
+		}
+		return unlock
+	}
+	_ = achievementObj.Set("unlock", func(playerID, key string) any { return setAchievement(playerID, key, nil) })
+	_ = achievementObj.Set("progress", func(playerID, key string, value int) any { return setAchievement(playerID, key, &value) })
+
 	mc := vm.NewObject()
 	_ = mc.Set("kv", kv)
 	_ = mc.Set("currency", currencyObj)
+	_ = mc.Set("achievements", achievementObj)
 	_ = mc.Set("playerdata", playerdata)
 	_ = mc.Set("players", players)
 	_ = mc.Set("leaderboard", lb)

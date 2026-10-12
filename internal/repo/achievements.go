@@ -212,3 +212,8 @@ func (r AchievementUnlocks) UnlockMap(ctx context.Context, playerID string) (map
 	}
 	return out, rows.Err()
 }
+
+// ByKey resolves an achievement strictly within the calling game's catalogue.
+func (r AchievementDefs) ByKey(ctx context.Context, gameID, key string) (*AchievementDef, error) {
+	return scanAchDef(r.DB.QueryRow(ctx, `SELECT `+achDefCols+` FROM achievement_defs WHERE game_id=$1 AND key=$2`, gameID, key))
+}

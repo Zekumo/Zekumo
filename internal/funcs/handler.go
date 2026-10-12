@@ -312,8 +312,9 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 // game-data capabilities as a saved function. No code or settings are published.
 func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Code string `json:"code"`
-		Body any    `json:"body"`
+		Code     string `json:"code"`
+		Body     any    `json:"body"`
+		PlayerID string `json:"player_id"`
 	}
 	if httpx.Decode(w, r, &req) != nil {
 		return
@@ -326,6 +327,15 @@ func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, "invalid_code", err.Error())
 		return
 	}
+	var player any
+	if req.PlayerID != "" {
+		p, err := h.Players.ByID(r.Context(), req.PlayerID)
+		if err != nil || p == nil || p.GameID != r.PathValue("id") {
+			httpx.Error(w, 404, "player_not_found", "no such player in this game")
+			return
+		}
+		player = map[string]any{"id": p.ID, "nickname": p.Nickname}
+	}
 	h.run(w, r, r.PathValue("id"), &repo.CloudFunction{Name: r.PathValue("name"), Code: req.Code},
-		Request{Method: "POST", Body: req.Body, Query: map[string]string{}})
+		Request{Method: "POST", Body: req.Body, Query: map[string]string{}, Player: player})
 }

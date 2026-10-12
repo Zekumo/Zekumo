@@ -3,6 +3,7 @@
 package achievements
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -325,4 +326,31 @@ func validateDefinition(d *repo.AchievementDef) error {
 		return errors.New("target must be >= 1")
 	}
 	return nil
+}
+
+// SetByKey exposes authoritative progress to trusted game-server functions.
+// A nil progress means full unlock; otherwise progress is absolute, monotonic,
+// and idempotent. The repository enforces achievement/player game equality.
+func (s *Service) SetByKey(ctx context.Context, gameID, playerID, key string, progress *int, events Emitter) (*repo.AchievementUnlock, error) {
+	if progress != nil && *progress < 0 {
+		return nil, errors.New("progress must be nonnegative")
+	}
+	def, err := s.Defs.ByKey(ctx, gameID, key)
+	if err != nil {
+		return nil, err
+	}
+	value := def.Target
+	if progress != nil {
+		value = *progress
+	}
+	unlock, newlyUnlocked, err := s.Unlocks.UpsertWithTransition(ctx, def.ID, playerID, value)
+	if err != nil {
+		return nil, err
+	}
+	if newlyUnlocked && events != nil {
+		events.Emit(gameID, "achievement.unlocked", map[string]any{
+			"achievement_id": def.ID, "achievement_key": def.Key, "player_id": playerID, "unlocked_at": unlock.UnlockedAt,
+		})
+	}
+	return unlock, nil
 }

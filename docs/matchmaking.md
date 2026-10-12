@@ -47,3 +47,23 @@ subscription interface.
 Only a focused local matcher/session lifecycle test, compilation, SDK typecheck
 and console JavaScript syntax check were run for this slice. No load, network,
 expiry-timer, cross-tenant integration or browser end-to-end suite was run.
+
+## Ready checks
+
+Matched rooms require all current members to mark ready and retain their original
+matched group size as the minimum needed to start. `room.ready` accepts
+`{ready:true|false}` and broadcasts a complete `room.ready` snapshot. Room members
+include `ready`; snapshots include `require_ready` and `min_players`. Only the
+calling player's readiness can be changed. Membership changes in a lobby reset
+all readiness, so clients should clear their UI on member join/leave and obtain a
+fresh snapshot. Ready state cannot change after start.
+
+Manual room creation can opt in with `require_ready:true` and `min_players`.
+Legacy rooms keep readiness optional and no extra minimum. Capacity updates cannot
+reduce capacity below the configured minimum. A matched room that loses players
+cannot start under its minimum; remaining players can leave and requeue.
+
+TypeScript exposes setReady and new creation options. Go exposes SetReady and
+CreateSessionRoom(RoomCreateOptions), keeping older creation helpers compatible.
+The console shows ready-player counts and the start minimum. The focused local
+matcher test covers readiness rejection and successful ready/start/finish.
