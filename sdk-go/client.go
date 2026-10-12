@@ -61,6 +61,7 @@ type Client struct {
 	Data         *DataAPI
 	Leaderboards *LeaderboardsAPI
 	Achievements *AchievementsAPI
+	Matches      *MatchesAPI
 	Friends      *FriendsAPI
 	Currency     *CurrencyAPI
 	Mailbox      *MailboxAPI
@@ -93,6 +94,7 @@ func New(opts Options) *Client {
 	c.Data = &DataAPI{c: c}
 	c.Leaderboards = &LeaderboardsAPI{c: c}
 	c.Achievements = &AchievementsAPI{c: c}
+	c.Matches = &MatchesAPI{c: c}
 	c.Friends = &FriendsAPI{c: c}
 	c.Currency = &CurrencyAPI{c: c}
 	c.Mailbox = &MailboxAPI{c: c}

@@ -335,3 +335,22 @@ type MatchFound struct {
 	TicketID string `json:"ticket_id"`
 	Room     Room   `json:"room"`
 }
+
+// MatchRecord is a durable record authored by a trusted game server.
+type MatchRecord struct {
+	ID         string          `json:"id"`
+	GameID     string          `json:"game_id"`
+	MatchKey   string          `json:"match_key"`
+	Status     string          `json:"status"`
+	Metadata   json.RawMessage `json:"metadata"`
+	Result     json.RawMessage `json:"result,omitempty"`
+	Revision   int64           `json:"revision"`
+	Source     string          `json:"source"`
+	CreatedAt  time.Time       `json:"created_at"`
+	FinishedAt *time.Time      `json:"finished_at,omitempty"`
+	PlayerIDs  []string        `json:"player_ids"`
+}
+type MatchRecordPage struct {
+	Matches      []MatchRecord `json:"matches"`
+	NextBeforeID string        `json:"next_before_id"`
+}

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -34,6 +35,7 @@ type Runtime struct {
 	Currency     *currency.Service
 	Achievements *achievements.Service
 	Events       achievements.Emitter
+	Matches      *repo.Matches
 
 	// AllowPrivateHTTP disables the private-address SSRF guard for
 	// mc.http.fetch — local development only.
@@ -299,10 +301,61 @@ func (rt *Runtime) Execute(ctx context.Context, gameID string, fn *repo.CloudFun
 	_ = achievementObj.Set("unlock", func(playerID, key string) any { return setAchievement(playerID, key, nil) })
 	_ = achievementObj.Set("progress", func(playerID, key string, value int) any { return setAchievement(playerID, key, &value) })
 
+	matchObj := vm.NewObject()
+	requireMatches := func() {
+		if rt.Matches == nil {
+			throw(errors.New("matches API is not available"))
+		}
+	}
+	matchID := func(raw string) int64 {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id < 1 {
+			throw(errors.New("invalid match ID"))
+		}
+		return id
+	}
+	matchResult := func(m *repo.MatchRecord, err error) any {
+		if errors.Is(err, repo.ErrNotFound) || errors.Is(err, repo.ErrMatchConflict) || errors.Is(err, repo.ErrInvalidMatch) {
+			throw(err)
+		}
+		if err != nil {
+			throwInternal(err)
+		}
+		raw, err := json.Marshal(m)
+		if err != nil {
+			throwInternal(err)
+		}
+		return toJS(raw)
+	}
+	_ = matchObj.Set("create", func(key string, players []string, metadata goja.Value) any {
+		requireMatches()
+		if metadata == nil || goja.IsUndefined(metadata) {
+			metadata = vm.ToValue(map[string]any{})
+		}
+		return matchResult(rt.Matches.Create(ctx, gameID, key, players, fromJS(metadata), "function:"+fn.Name))
+	})
+	_ = matchObj.Set("get", func(id string) any {
+		requireMatches()
+		return matchResult(rt.Matches.Get(ctx, gameID, matchID(id), ""))
+	})
+	_ = matchObj.Set("complete", func(id string, revision int64, result goja.Value) any {
+		requireMatches()
+		return matchResult(rt.Matches.Finish(ctx, gameID, matchID(id), revision, "completed", fromJS(result)))
+	})
+	_ = matchObj.Set("cancel", func(id string, revision int64, reason string) any {
+		requireMatches()
+		raw, err := json.Marshal(map[string]string{"reason": reason})
+		if err != nil {
+			throw(err)
+		}
+		return matchResult(rt.Matches.Finish(ctx, gameID, matchID(id), revision, "cancelled", raw))
+	})
+
 	mc := vm.NewObject()
 	_ = mc.Set("kv", kv)
 	_ = mc.Set("currency", currencyObj)
 	_ = mc.Set("achievements", achievementObj)
+	_ = mc.Set("matches", matchObj)
 	_ = mc.Set("playerdata", playerdata)
 	_ = mc.Set("players", players)
 	_ = mc.Set("leaderboard", lb)

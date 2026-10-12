@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -501,4 +502,25 @@ func (k *KVAPI) List(ctx context.Context, namespace string, limit, offset int) (
 	}
 	q := query{"limit": itoa(limit), "offset": itoa(offset)}
 	return out.Keys, k.c.get(ctx, "/v1/kv/"+esc(namespace)+q.encode(), &out)
+}
+
+// MatchesAPI only reads the authenticated player's durable match records.
+type MatchesAPI struct{ c *Client }
+
+func (m *MatchesAPI) List(ctx context.Context, beforeID string, limit int) (*MatchRecordPage, error) {
+	path := "/v1/matches?limit=" + strconv.Itoa(limit)
+	if limit == 0 {
+		path = "/v1/matches?limit=20"
+	}
+	if beforeID != "" {
+		path += "&before_id=" + url.QueryEscape(beforeID)
+	}
+	var out MatchRecordPage
+	err := m.c.get(ctx, path, &out)
+	return &out, err
+}
+func (m *MatchesAPI) Get(ctx context.Context, id string) (*MatchRecord, error) {
+	var out MatchRecord
+	err := m.c.get(ctx, "/v1/matches/"+esc(id), &out)
+	return &out, err
 }

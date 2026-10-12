@@ -17,7 +17,7 @@ async function renderFunctions(host) {
 
   pageShell(host, {
     title: '云函数',
-    subtitle: '服务端 JS(goja 沙箱,10 秒上限)。全局有 request 与 mc.kv / mc.playerdata / mc.players / mc.leaderboard / mc.currency / mc.achievements / mc.http。',
+    subtitle: '服务端 JS(goja 沙箱,10 秒上限)。全局有 request 与 mc.kv / mc.playerdata / mc.players / mc.leaderboard / mc.currency / mc.achievements / mc.matches / mc.http。',
     actions: `<button class="btn filled" data-write onclick="newFnDialog()">新建函数</button>`,
     body: functions.length ? `
       <div class="master-detail">

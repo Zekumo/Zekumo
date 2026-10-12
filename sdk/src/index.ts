@@ -214,6 +214,22 @@ export interface RoomSummary {
   meta?: Json;
 }
 
+/** Durable, server-authored result; ID is a decimal string to preserve precision. */
+export interface MatchRecord {
+  id: string;
+  game_id: string;
+  match_key: string;
+  status: "active" | "completed" | "cancelled";
+  metadata: Json;
+  result?: Json;
+  revision: number;
+  source: string;
+  created_at: string;
+  finished_at?: string;
+  player_ids: string[] | null;
+}
+export interface MatchRecordPage { matches: MatchRecord[]; next_before_id: string; }
+
 export interface MatchTicket {
   id: string;
   pool: string;
@@ -436,6 +452,17 @@ class LeaderboardsAPI {
 
   me(board: string): Promise<LeaderboardEntry> {
     return this.http.request("GET", `/v1/leaderboards/${encodeURIComponent(board)}/me`);
+  }
+}
+
+class MatchesAPI {
+  constructor(private readonly http: Http) {}
+  /** Only records containing the logged-in player are visible. */
+  list(opts: { beforeId?: string; limit?: number } = {}): Promise<MatchRecordPage> {
+    return this.http.request("GET", "/v1/matches", { query: { before_id: opts.beforeId, limit: opts.limit } });
+  }
+  get(id: string): Promise<MatchRecord> {
+    return this.http.request("GET", `/v1/matches/${encodeURIComponent(id)}`);
   }
 }
 
@@ -1050,6 +1077,7 @@ export class Zekumo {
   readonly playerData: PlayerDataAPI;
   readonly leaderboards: LeaderboardsAPI;
   readonly achievements: AchievementsAPI;
+  readonly matches: MatchesAPI;
   readonly friends: FriendsAPI;
   readonly currency: CurrencyAPI;
   readonly mailbox: MailboxAPI;
@@ -1080,6 +1108,7 @@ export class Zekumo {
     this.playerData = new PlayerDataAPI(http);
     this.leaderboards = new LeaderboardsAPI(http);
     this.achievements = new AchievementsAPI(http);
+    this.matches = new MatchesAPI(http);
     this.friends = new FriendsAPI(http);
     this.currency = new CurrencyAPI(http);
     this.mailbox = new MailboxAPI(http);

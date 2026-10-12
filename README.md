@@ -661,3 +661,13 @@ web/admin           内嵌 Web 控制台(Material Design 3,浅色/深色)
 web/sso             托管 SSO 授权登录页
 web/oauth           托管 OAuth2 同意授权页
 ```
+
+
+### 新增：云函数发布链与持久对局记录
+
+- [云函数版本、共享草稿、发布与持久定时调度](docs/cloud-function-versions.md)
+- [匹配队列、就绪检查与房间会话](docs/matchmaking.md)
+- [云函数成就发放](docs/cloud-function-achievements.md)
+- [服务器权威持久对局记录与玩家只读查询](docs/durable-match-records.md)
+
+这些功能的检查范围与边界见各文档；不代表经过完整回归或生产负载验证。

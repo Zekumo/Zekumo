@@ -128,6 +128,9 @@ func registerPlayer(rt router) {
 	p("GET /v1/friends/requests", d.friendsH.ListRequests)
 	p("DELETE /v1/friends/{player_id}", d.friendsH.Remove)
 	p("POST /v1/friends/block", d.friendsH.Block)
+	// Durable trusted-server match records: player endpoints are read-only.
+	p("GET /v1/matches", d.matchesH.PlayerList)
+	p("GET /v1/matches/{match_id}", d.matchesH.PlayerGet)
 	// Achievements
 	p("GET /v1/achievements", d.achievementsH.List)
 	p("GET /v1/achievements/unlocked", d.achievementsH.Unlocked)
@@ -174,6 +177,10 @@ func registerAdmin(rt router) {
 	ta("POST /admin/api/games", "admin", tenant.ResourceNone, d.adminH.CreateGame)
 	ta("DELETE /admin/api/games/{id}", "owner", tenant.ResourceGame, d.adminH.DeleteGame)
 	ta("GET /admin/api/games/{id}/players", "viewer", tenant.ResourceGame, d.adminH.ListPlayers)
+	ta("GET /admin/api/games/{id}/matches", "viewer", tenant.ResourceGame, d.matchesH.AdminList)
+	ta("POST /admin/api/games/{id}/matches", "editor", tenant.ResourceGame, d.matchesH.Create)
+	ta("GET /admin/api/games/{id}/matches/{match_id}", "viewer", tenant.ResourceGame, d.matchesH.AdminGet)
+	ta("POST /admin/api/games/{id}/matches/{match_id}/finish", "editor", tenant.ResourceGame, d.matchesH.Finish)
 	ta("GET /admin/api/games/{id}/rooms", "viewer", tenant.ResourceGame, d.hub.AdminRooms)
 	ta("GET /admin/api/players/{pid}/data", "viewer", tenant.ResourcePlayer, d.adminH.PlayerData)
 	ta("GET /admin/api/accounts", "viewer", tenant.ResourceNone, d.adminH.ListAccounts)

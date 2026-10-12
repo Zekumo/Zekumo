@@ -22,6 +22,7 @@ import (
 	"zekumo/internal/leaderboard"
 	"zekumo/internal/logs"
 	"zekumo/internal/mailbox"
+	"zekumo/internal/matches"
 	"zekumo/internal/oauth"
 	"zekumo/internal/player"
 	"zekumo/internal/ratelimit"
@@ -64,6 +65,7 @@ type deps struct {
 	announcementsH *announcements.Handler
 	currencyH      *currency.Handler
 	mailH          *mailbox.Handler
+	matchesH       *matches.Handler
 	bansH          *bans.Handler
 	kvH            *kv.Handler
 	exportsH       *exports.Handler
@@ -123,11 +125,12 @@ func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob stora
 	chatSvc := chat.NewService(repo.Chat{DB: st.DB}, cfg.BannedWordsFile)
 	hub := realtime.NewHub(chatSvc, issuer)
 
+	matchRecords := repo.Matches{DB: st.DB}
 	achievementsSvc := &achievements.Service{Defs: repo.AchievementDefs{DB: st.DB}, Unlocks: repo.AchievementUnlocks{DB: st.DB}}
 	lbSvc := &leaderboard.Service{RDB: st.RDB, Scores: repo.Scores{DB: st.DB}, Players: players}
 	fnRuntime := &funcs.Runtime{
 		GameData: repo.GameData{DB: st.DB}, PlayerData: data, Players: players, Games: games,
-		Leaderboard: lbSvc, Currency: currencySvc, Achievements: achievementsSvc, Events: bus,
+		Leaderboard: lbSvc, Currency: currencySvc, Achievements: achievementsSvc, Events: bus, Matches: &matchRecords,
 		AllowPrivateHTTP: cfg.FuncHTTPAllowPrivate, Logs: logSvc,
 	}
 	fnHandler := &funcs.Handler{
@@ -137,12 +140,13 @@ func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob stora
 	(&funcs.Scheduler{Functions: fnHandler.Functions, Runtime: fnRuntime, Logs: logSvc}).Start(ctx)
 
 	return &deps{
-		blob:    blob,
-		store:   st,
-		limiter: limiter,
-		logs:    logSvc,
-		hub:     hub,
-		tenants: tenants,
+		matchesH: &matches.Handler{Records: matchRecords},
+		blob:     blob,
+		store:    st,
+		limiter:  limiter,
+		logs:     logSvc,
+		hub:      hub,
+		tenants:  tenants,
 		authH: &auth.Handler{
 			Issuer:   issuer,
 			Registry: auth.NewRegistry(auth.GuestProvider{Players: players}, passwordProvider, ssoProvider),
