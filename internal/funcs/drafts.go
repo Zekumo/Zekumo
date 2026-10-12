@@ -3,6 +3,7 @@ package funcs
 import (
 	"errors"
 	"github.com/dop251/goja"
+	"github.com/jackc/pgx/v5"
 	"net/http"
 	"time"
 	"zekumo/internal/httpx"
@@ -130,4 +131,13 @@ func (h *Handler) recordExecution(gameID string, fn *repo.CloudFunction, start t
 	h.Logs.Write(gameID, level, "funcs", "invocation", "cloud function "+status, map[string]any{
 		"function": fn.Name, "revision": fn.Revision, "duration_ms": time.Since(start).Milliseconds(), "status": status, "preview": fn.Revision == 0,
 	})
+}
+
+func (h *Handler) Schedule(w http.ResponseWriter, r *http.Request) {
+	schedule, err := h.Functions.Schedule(r.Context(), r.PathValue("id"), r.PathValue("name"))
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		httpx.Error(w, 500, "internal", err.Error())
+		return
+	}
+	httpx.JSON(w, 200, map[string]any{"schedule": schedule})
 }

@@ -101,3 +101,49 @@ func TestFunctionDraftPublishLifecycle(t *testing.T) {
 		t.Fatalf("publication history: %v %v", versions, err)
 	}
 }
+
+func TestFunctionScheduleClaimLifecycle(t *testing.T) {
+	db, ctx := isolatedPostgres(t)
+	if err := Migrate(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	g, err := (repo.Games{DB: db}).Create(ctx, "schedules")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := repo.Functions{DB: db}
+	f, err := r.Upsert(ctx, g.ID, "cron", "1", true, false, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schedule, err := r.Schedule(ctx, g.ID, "cron")
+	if err != nil || schedule.DispatchCount != 0 {
+		t.Fatalf("initial schedule: %+v %v", schedule, err)
+	}
+	if _, err = db.Exec(ctx, `UPDATE cloud_function_schedules SET next_run_at=now()-interval '1 second' WHERE function_id=$1`, f.ID); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := r.ClaimCron(ctx, 32)
+	if err != nil || len(claimed) != 1 || claimed[0].Revision != f.Revision {
+		t.Fatalf("claim: %+v %v", claimed, err)
+	}
+	again, err := r.ClaimCron(ctx, 32)
+	if err != nil || len(again) != 0 {
+		t.Fatalf("duplicate claim: %+v %v", again, err)
+	}
+	current, err := r.Get(ctx, g.ID, "cron")
+	if err != nil || current.Revision != f.Revision {
+		t.Fatal("claim modified live revision")
+	}
+	schedule, err = r.Schedule(ctx, g.ID, "cron")
+	if err != nil || schedule.DispatchCount != 1 || schedule.LastDispatchedAt == nil {
+		t.Fatalf("dispatch metadata: %+v %v", schedule, err)
+	}
+	if _, err = r.Upsert(ctx, g.ID, "cron", "2", false, false, 10); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err = db.QueryRow(ctx, `SELECT count(*) FROM cloud_function_schedules WHERE function_id=$1`, f.ID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("disabled schedule retained: %d %v", count, err)
+	}
+}

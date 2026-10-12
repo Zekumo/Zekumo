@@ -63,3 +63,25 @@ function name, executed revision, duration, outcome and preview marker. Successf
 publication also logs its function/revision. No request body, return value or
 source code is added to these metadata logs. Existing error logs remain. Inspect
 these through the existing tenant-scoped console logs with source `funcs`.
+
+## Persistent scheduled dispatch
+
+Migration 0024 persists next-run timestamps, last-dispatched timestamps and
+counts. Cron intervals survive restarts. PostgreSQL row locks and SKIP LOCKED
+share dispatch intervals across replicas; the scheduler claims at most 32 jobs
+per 10-second tick. Enabling a timer or changing its interval schedules the first
+run one interval later; disabling removes the schedule. Code-only publication
+preserves the due time. A restart after missed intervals runs once when eligible,
+without replaying every missed interval.
+
+The console shows scheduling metadata from viewer-protected GET
+`.../functions/{name}/schedule`, returning `{schedule: object|null}`.
+Dispatch is not completion: due time advances before execution. Process crashes,
+runtime overload or script errors do not retry that interval. Game effects still
+need business idempotency keys. Already-claimed invocations may finish using the
+claimed code revision after an operator changes or disables the function. This
+is bounded, replica-coordinated dispatch, not an exactly-once job system.
+
+A focused PostgreSQL schedule lifecycle sanity test checks claiming, duplicate
+suppression, dispatch metadata, unchanged function revision and disabling. No
+multi-process failover or scheduler load test was run.

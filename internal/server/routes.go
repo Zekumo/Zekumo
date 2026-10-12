@@ -196,6 +196,7 @@ func registerAdmin(rt router) {
 	ta("GET /admin/api/games/{id}/functions/{name}", "viewer", tenant.ResourceGame, d.fnH.Get)
 	ta("PUT /admin/api/games/{id}/functions/{name}", "editor", tenant.ResourceGame, d.fnH.Put)
 	ta("DELETE /admin/api/games/{id}/functions/{name}", "editor", tenant.ResourceGame, d.fnH.Delete)
+	ta("GET /admin/api/games/{id}/functions/{name}/schedule", "viewer", tenant.ResourceGame, d.fnH.Schedule)
 	ta("GET /admin/api/games/{id}/functions/{name}/draft", "viewer", tenant.ResourceGame, d.fnH.Draft)
 	ta("PUT /admin/api/games/{id}/functions/{name}/draft", "editor", tenant.ResourceGame, d.fnH.SaveDraft)
 	ta("DELETE /admin/api/games/{id}/functions/{name}/draft", "editor", tenant.ResourceGame, d.fnH.DeleteDraft)
