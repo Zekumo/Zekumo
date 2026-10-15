@@ -14,7 +14,7 @@ async function renderGames(host) {
 }
 
 function gameCard(g) {
-  return `<div class="game-card" onclick="go('overview', '${g.id}')">
+  return `<div class="game-card" onclick="go('overview', ${inlineJSON(g.id)})">
     <div class="game-card-head">
       <span class="game-name">${esc(g.name)}</span>
       <span class="badge ${g.online > 0 ? 'ok' : ''}">${g.online} 在线</span>
@@ -27,7 +27,7 @@ function gameCard(g) {
     </div>
     <div class="game-card-foot">
       <span class="dim">创建于 ${fmtAgo(g.created_at)}</span>
-      <button class="btn text danger" data-write data-min-role="owner" onclick="event.stopPropagation();deleteGame('${g.id}','${esc(g.name)}')">删除</button>
+      <button class="btn text danger" data-write data-min-role="owner" onclick="event.stopPropagation();deleteGame(${inlineJSON(g.id)},${inlineJSON(g.name)})">删除</button>
     </div>
   </div>`;
 }
@@ -78,7 +78,7 @@ async function renderOAuth(host) {
                               : '<span class="badge">公开客户端</span>'}</td>
         <td class="dim">${(c.redirect_urls || '').split('\n').filter(Boolean).map(esc).join('<br>') || '—'}</td>
         <td class="dim">${fmtAgo(c.created_at)}</td>
-        <td><button class="btn text danger" data-write data-min-role="admin" onclick="deleteOAuth('${c.client_id}','${esc(c.name)}')">删除</button></td>
+        <td><button class="btn text danger" data-write data-min-role="admin" onclick="deleteOAuth(${inlineJSON(c.client_id)},${inlineJSON(c.name)})">删除</button></td>
       </tr>`).join('')}</tbody></table></div>`
       : emptyState('🔑', '还没有 OAuth 应用', '第三方要接入通行证登录时,在这里为它注册一个应用。'),
   });
@@ -133,7 +133,7 @@ async function renderAccounts(host) {
         <td>${esc(a.nickname) || '—'}</td>
         <td class="dim">${fmtAgo(a.created_at)}</td>
         <td class="dim">${fmtAgo(a.last_login_at)}</td>
-        <td><button class="btn text danger" data-write data-min-role="owner" onclick="deleteAccount('${a.id}','${esc(a.username)}')">删除</button></td>
+        <td><button class="btn text danger" data-write data-min-role="owner" onclick="deleteAccount(${inlineJSON(a.id)},${inlineJSON(a.username)})">删除</button></td>
       </tr>`).join('')}</tbody></table></div>`
       : emptyState('👤', search ? '没有匹配的账号' : '还没有通行证账号',
                    search ? '换个关键词试试。' : '玩家在游戏里注册通行证后会出现在这里。'),

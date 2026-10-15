@@ -23,7 +23,7 @@ async function renderReleases(host) {
 
 function relRow(r) {
   const st = REL_STATUS[r.status] || { text: r.status, badge: '' };
-  const q = `'${esc(r.version)}','${esc(r.channel)}'`;
+  const q = `${inlineJSON(r.version)},${inlineJSON(r.channel)}`;
   const acts = [`<button class="btn text" onclick="manageArtifacts(${q})">产物</button>`];
   if (r.status === 'draft') {
     acts.push(`<button class="btn text" data-write onclick="publishRelease(${q})">发布</button>`,

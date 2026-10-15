@@ -23,7 +23,7 @@ async function renderFunctions(host) {
       <div class="master-detail">
         <div class="card list-card">
           ${functions.map(f => `
-            <button class="list-item ${f.name === current?.name ? 'on' : ''}" onclick="openFn('${esc(f.name)}')">
+            <button class="list-item ${f.name === current?.name ? 'on' : ''}" onclick="openFn(${inlineJSON(f.name)})">
               <div class="list-title">${esc(f.name)}</div>
               <div class="dim">
                 ${f.enabled ? '<span class="badge ok">启用</span>' : '<span class="badge">停用</span>'}
@@ -66,9 +66,9 @@ async function openFn(name) {
       <textarea id="fnCode" placeholder=" " style="min-height:300px">${esc(f.code)}</textarea>
       <span class="label">函数代码</span></label>
     <div class="row" style="margin-top:16px">
-      <button class="btn filled" data-write onclick="saveFn('${esc(f.name)}')">保存</button>
-      <button class="btn outlined" data-write onclick="testFn('${esc(f.name)}')">测试运行</button>
-      <button class="btn text danger" data-write onclick="deleteFn('${esc(f.name)}')">删除</button>
+      <button class="btn filled" data-write onclick="saveFn(${inlineJSON(f.name)})">保存</button>
+      <button class="btn outlined" data-write onclick="testFn(${inlineJSON(f.name)})">测试运行</button>
+      <button class="btn text danger" data-write onclick="deleteFn(${inlineJSON(f.name)})">删除</button>
     </div>
     <div id="fnOut"></div>
     <p class="dim" style="margin-top:20px">

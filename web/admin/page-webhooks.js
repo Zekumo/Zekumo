@@ -17,9 +17,9 @@ async function renderWebhooks(host) {
           <div class="kv"><span>订阅事件</span><b>${h.events === '*' ? '全部' : esc(h.events)}</b></div>
           <div class="kv"><span>签名密钥</span>${secretCell(h.secret, 'Secret')}</div>
           <div class="row" style="margin-top:16px">
-            <button class="btn outlined" data-write onclick="testHook('${h.id}')">发送测试事件</button>
-            <button class="btn text" onclick="showDeliveries('${h.id}','${esc(h.url)}')">投递记录</button>
-            <button class="btn text danger" data-write onclick="deleteHook('${h.id}')">删除</button>
+            <button class="btn outlined" data-write onclick="testHook(${inlineJSON(h.id)})">发送测试事件</button>
+            <button class="btn text" onclick="showDeliveries(${inlineJSON(h.id)},${inlineJSON(h.url)})">投递记录</button>
+            <button class="btn text danger" data-write onclick="deleteHook(${inlineJSON(h.id)})">删除</button>
           </div>
         </div>`).join('')}
       <p class="dim">可订阅事件:${data.known_events.map(e => `<code>${esc(e)}</code>`).join(' ')}</p>`

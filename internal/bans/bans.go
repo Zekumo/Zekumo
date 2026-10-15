@@ -33,12 +33,15 @@ func (s *Service) TokenBanned(ctx context.Context, playerID string) bool {
 	return err == nil && n > 0
 }
 
-func (s *Service) ActiveBan(ctx context.Context, playerID string) *repo.PlayerBan {
+// ActiveBan returns the player's current ban, or nil if there is none. A
+// lookup failure is returned as an error, not as "not banned": callers must
+// not let a database blip through as an unban.
+func (s *Service) ActiveBan(ctx context.Context, playerID string) (*repo.PlayerBan, error) {
 	ban, err := s.Bans.Active(ctx, playerID)
-	if err != nil {
-		return nil
+	if errors.Is(err, repo.ErrNotFound) {
+		return nil, nil
 	}
-	return ban
+	return ban, err
 }
 
 func (s *Service) Ban(ctx context.Context, playerID, reason, operator string, durationSecs int64) (*repo.PlayerBan, error) {
@@ -75,6 +78,14 @@ func (s *Service) Unban(ctx context.Context, playerID, liftedBy string) (*repo.P
 type Handler struct {
 	Svc    *Service
 	Events Emitter
+	Kicker Kicker // optional: drops the banned player's live connection
+}
+
+// Kicker closes a player's realtime connection. Token checks only run at
+// connect time, so without this a banned player keeps chatting until they
+// reconnect.
+type Kicker interface {
+	Kick(gameID, playerID, reason string)
 }
 
 // Ban handles POST /admin/api/players/{pid}/ban
@@ -96,7 +107,10 @@ func (h *Handler) Ban(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "bad_duration", "duration_secs must be >= 0")
 		return
 	}
-	if existing := h.Svc.ActiveBan(r.Context(), playerID); existing != nil {
+	if existing, err := h.Svc.ActiveBan(r.Context(), playerID); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	} else if existing != nil {
 		httpx.Error(w, http.StatusConflict, "already_banned", "player already has an active ban")
 		return
 	}
@@ -112,6 +126,9 @@ func (h *Handler) Ban(w http.ResponseWriter, r *http.Request) {
 		}
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
+	}
+	if h.Kicker != nil {
+		h.Kicker.Kick(ban.GameID, ban.PlayerID, "banned")
 	}
 	if h.Events != nil {
 		h.Events.Emit(ban.GameID, "player.banned", map[string]any{

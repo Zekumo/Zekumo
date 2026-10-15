@@ -13,6 +13,11 @@ var (
 	ErrIdemConflict      = errors.New("idempotency key reused with different parameters")
 )
 
+// MailIdemPrefix namespaces the ledger keys of mail reward claims. Caller-
+// chosen keys must not use it: a player who spent with "mail:<id>" first
+// would make that mail's claim fail on the unique key forever.
+const MailIdemPrefix = "mail:"
+
 type Currencies struct{ DB *pgxpool.Pool }
 
 const currencyCols = `id, game_id, name, display_name, icon_url, created_at`

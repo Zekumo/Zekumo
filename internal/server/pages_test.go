@@ -44,3 +44,21 @@ func TestHostedPages(t *testing.T) {
 		})
 	}
 }
+
+// Pages holding tokens in localStorage must refuse to be framed, or a
+// consent click can be hijacked from another site.
+func TestPagesRefuseFraming(t *testing.T) {
+	rt := router{ServeMux: http.NewServeMux(), d: &deps{}}
+	registerPages(rt)
+	handler := withSecurityHeaders(rt)
+	for _, path := range []string{"/admin/", "/sso/authorize", "/oauth/authorize", "/"} {
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, httptest.NewRequest("GET", path, nil))
+		if got := res.Header().Get("X-Frame-Options"); got != "DENY" {
+			t.Errorf("%s: X-Frame-Options = %q, want DENY", path, got)
+		}
+		if got := res.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-ancestors 'none'") {
+			t.Errorf("%s: Content-Security-Policy = %q, want frame-ancestors 'none'", path, got)
+		}
+	}
+}

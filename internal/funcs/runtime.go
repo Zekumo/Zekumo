@@ -269,6 +269,9 @@ func (rt *Runtime) Execute(ctx context.Context, gameID string, fn *repo.CloudFun
 		if errors.Is(err, repo.ErrIdemConflict) {
 			throw(errors.New("idempotency key was already used with a different amount"))
 		}
+		if errors.Is(err, currency.ErrReservedKey) {
+			throw(err)
+		}
 		if err != nil {
 			throwInternal(err)
 		}

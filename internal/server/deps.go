@@ -118,7 +118,7 @@ func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob stora
 	issuer := auth.NewTokenIssuer(cfg.JWTSecret, cfg.TokenTTL)
 	tickets := sso.Tickets{RDB: st.RDB}
 	passwordProvider := auth.PasswordProvider{Players: players}
-	ssoProvider := sso.Provider{Accounts: accounts, Players: players, Tickets: tickets}
+	ssoProvider := sso.Provider{Accounts: accounts, Players: players, Tickets: tickets, Attempts: attempts}
 
 	chatSvc := chat.NewService(repo.Chat{DB: st.DB}, cfg.BannedWordsFile)
 	hub := realtime.NewHub(chatSvc, issuer)
@@ -171,6 +171,7 @@ func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob stora
 			Games: games, Players: players, Accounts: accounts, Data: data,
 			Dialogues: repo.Dialogues{DB: st.DB}, OAuthClients: repo.OAuthClients{DB: st.DB}, Hub: hub,
 			Tenants:          tenants,
+			Attempts:         attempts,
 			DefaultJWTSecret: cfg.JWTSecret == config.DefaultJWTSecret,
 		},
 		hooksH:  &hooks.Handler{Bus: bus},
@@ -200,7 +201,7 @@ func newDeps(ctx context.Context, cfg config.Config, st *store.Store, blob stora
 			DB: st.DB, Mail: repo.Mail{DB: st.DB},
 			Wallets: repo.Wallets{DB: st.DB}, Currencies: repo.Currencies{DB: st.DB},
 		},
-		bansH:    &bans.Handler{Svc: bansSvc, Events: bus},
+		bansH:    &bans.Handler{Svc: bansSvc, Events: bus, Kicker: hub},
 		kvH:      kvH,
 		exportsH: &exports.Handler{Svc: exportsSvc},
 		tenantH:  &tenant.Handler{Store: tenants, Accounts: accounts},

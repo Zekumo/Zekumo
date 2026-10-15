@@ -27,7 +27,7 @@ async function renderBoards(host) {
     subtitle: '榜单由第一次提交分数时自动创建。',
     body: `
       <div class="chips">${boards.map(b => `
-        <button class="chip ${b.board === active ? 'on' : ''}" onclick="window.__board='${esc(b.board)}';route()">
+        <button class="chip ${b.board === active ? 'on' : ''}" onclick="window.__board=${inlineJSON(b.board)};route()">
           ${esc(b.board)} <span class="chip-count">${b.players}</span>
         </button>`).join('')}</div>
 

@@ -22,6 +22,7 @@ type Provider struct {
 	Accounts repo.Accounts
 	Players  repo.Players
 	Tickets  Tickets
+	Attempts auth.AttemptLimiter // optional; shared with every other account login path
 }
 
 func (Provider) Name() string { return "sso" }
@@ -59,16 +60,31 @@ func (p Provider) resolveAccount(ctx context.Context, gameID string, creds auth.
 		}
 		return accountID, nil
 	}
+	identity := auth.AccountIdentity(creds.Username)
+	if p.Attempts != nil && p.Attempts.Locked(ctx, identity) {
+		return "", auth.ErrLocked
+	}
 	account, err := p.Accounts.ByUsername(ctx, strings.TrimSpace(creds.Username))
 	if errors.Is(err, repo.ErrNotFound) {
 		auth.BurnPasswordCheck(creds.Password)
-		return "", auth.ErrBadCredentials
+		return "", p.fail(ctx, identity)
 	}
 	if err != nil {
 		return "", err
 	}
 	if bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(creds.Password)) != nil {
-		return "", auth.ErrBadCredentials
+		return "", p.fail(ctx, identity)
+	}
+	if p.Attempts != nil {
+		p.Attempts.Succeed(ctx, identity)
 	}
 	return account.ID, nil
+}
+
+// fail records a wrong password and reports which error to return.
+func (p Provider) fail(ctx context.Context, identity string) error {
+	if p.Attempts != nil && p.Attempts.Fail(ctx, identity) {
+		return auth.ErrLocked
+	}
+	return auth.ErrBadCredentials
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"zekumo/internal/auth"
 	"zekumo/internal/httpx"
@@ -36,8 +37,16 @@ func (s *Service) GrantByName(ctx context.Context, gameID, name, playerID string
 	if err != nil || p.GameID != gameID {
 		return 0, false, repo.ErrNotFound
 	}
+	if reservedIdemKey(idemKey) {
+		return 0, false, ErrReservedKey
+	}
 	return s.Wallets.Apply(ctx, cur.ID, playerID, amount, "grant", idemKey, note)
 }
+
+// ErrReservedKey rejects idempotency keys in a namespace the platform uses.
+var ErrReservedKey = errors.New("idempotency key prefix " + repo.MailIdemPrefix + " is reserved")
+
+func reservedIdemKey(key string) bool { return strings.HasPrefix(key, repo.MailIdemPrefix) }
 
 type Handler struct {
 	Svc *Service
@@ -74,6 +83,10 @@ func (h *Handler) decodeTx(w http.ResponseWriter, r *http.Request) *txRequest {
 	}
 	if req.IdempotencyKey == "" || len(req.IdempotencyKey) > maxKeyLen {
 		httpx.Error(w, http.StatusBadRequest, "bad_idempotency_key", "idempotency_key is required (max 128 chars)")
+		return nil
+	}
+	if reservedIdemKey(req.IdempotencyKey) {
+		httpx.Error(w, http.StatusBadRequest, "bad_idempotency_key", ErrReservedKey.Error())
 		return nil
 	}
 	return &req

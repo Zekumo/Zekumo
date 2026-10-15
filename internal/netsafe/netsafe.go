@@ -30,8 +30,10 @@ var blocked = []netip.Prefix{
 	netip.MustParsePrefix("198.18.0.0/15"),
 	netip.MustParsePrefix("224.0.0.0/4"),
 	netip.MustParsePrefix("240.0.0.0/4"),
-	netip.MustParsePrefix("::/128"),
-	netip.MustParsePrefix("::1/128"),
+	netip.MustParsePrefix("::/96"),          // unspecified, loopback, IPv4-compatible
+	netip.MustParsePrefix("64:ff9b::/96"),   // NAT64: reaches the embedded IPv4
+	netip.MustParsePrefix("64:ff9b:1::/48"), // local-use NAT64
+	netip.MustParsePrefix("2002::/16"),      // 6to4: can embed a private IPv4
 	netip.MustParsePrefix("fc00::/7"),
 	netip.MustParsePrefix("fe80::/10"),
 	netip.MustParsePrefix("fec0::/10"),

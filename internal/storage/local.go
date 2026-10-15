@@ -7,9 +7,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -121,9 +123,16 @@ func (l *Local) handleGet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid or expired signature", http.StatusForbidden)
 		return
 	}
-	if fn := r.URL.Query().Get("fn"); fn != "" {
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fn))
+	// Objects are tenant-uploaded and served from the platform's own origin,
+	// next to the console. Never let the browser render one (an uploaded .html
+	// would run with access to console tokens): always download, never sniff.
+	fn := r.URL.Query().Get("fn")
+	if fn == "" {
+		fn = path.Base(key)
 	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": fn}))
 	http.ServeFile(w, r, l.path(key))
 }
 
@@ -146,7 +155,7 @@ func (l *Local) signURL(method, key, filename string) string {
 	if filename != "" {
 		q.Set("fn", filename)
 	}
-	q.Set("sig", l.sign(method, key, exp))
+	q.Set("sig", l.sign(method, key, filename, exp))
 	verb := "put"
 	if method == "GET" {
 		verb = "get"
@@ -161,15 +170,17 @@ func (l *Local) verify(r *http.Request, method string) (string, bool) {
 	if err != nil || key == "" || time.Now().Unix() > exp {
 		return "", false
 	}
-	want := l.sign(method, key, exp)
+	want := l.sign(method, key, q.Get("fn"), exp)
 	if !hmac.Equal([]byte(want), []byte(q.Get("sig"))) {
 		return "", false
 	}
 	return key, true
 }
 
-func (l *Local) sign(method, key string, exp int64) string {
+// sign covers every query parameter the handlers act on; an unsigned one
+// (fn used to be) can be edited on a valid URL.
+func (l *Local) sign(method, key, filename string, exp int64) string {
 	mac := hmac.New(sha256.New, l.secret)
-	fmt.Fprintf(mac, "%s\n%s\n%d", method, key, exp)
+	fmt.Fprintf(mac, "%s\n%s\n%s\n%d", method, key, filename, exp)
 	return hex.EncodeToString(mac.Sum(nil))
 }

@@ -80,7 +80,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if httpx.Decode(w, r, &req) != nil {
 		return
 	}
-	identity := "account:" + strings.ToLower(strings.TrimSpace(req.Username))
+	identity := auth.AccountIdentity(req.Username)
 	if h.Attempts != nil && h.Attempts.Locked(r.Context(), identity) {
 		httpx.Error(w, http.StatusTooManyRequests, "locked",
 			"too many failed attempts for this account, try again later")
@@ -210,8 +210,12 @@ func (h *Handler) BindPlayer(w http.ResponseWriter, r *http.Request) {
 	if httpx.Decode(w, r, &creds) != nil {
 		return
 	}
-	provider := Provider{Accounts: h.Accounts, Players: h.Players, Tickets: h.Tickets}
+	provider := Provider{Accounts: h.Accounts, Players: h.Players, Tickets: h.Tickets, Attempts: h.Attempts}
 	accountID, err := provider.resolveAccount(r.Context(), claims.GameID, creds)
+	if errors.Is(err, auth.ErrLocked) {
+		httpx.Error(w, http.StatusTooManyRequests, "locked", err.Error())
+		return
+	}
 	if errors.Is(err, auth.ErrBadCredentials) {
 		httpx.Error(w, http.StatusUnauthorized, "bad_credentials", "wrong username or password")
 		return

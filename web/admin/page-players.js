@@ -9,14 +9,14 @@ async function renderPlayers(host) {
 
   pageShell(host, {
     title: '玩家',
-    subtitle: `${state.game.name} 的玩家。点任意一行查看存档。`,
+    subtitle: `${esc(state.game.name)} 的玩家。点任意一行查看存档。`,
     actions: `<label class="field compact" style="width:260px">
         <input id="pSearch" placeholder=" " value="${esc(search)}"
                onkeydown="if(event.key==='Enter'){window.__playerSearch=this.value;route()}">
         <span class="label">搜索昵称 / 标识</span></label>`,
     body: players.length ? `<div class="card table-card"><table>
         <thead><tr><th>昵称</th><th>登录方式</th><th>标识</th><th>注册</th><th>最近登录</th><th></th></tr></thead>
-        <tbody>${players.map(p => `<tr class="clickable" onclick="showPlayer('${p.id}','${esc(p.nickname)}')">
+        <tbody>${players.map(p => `<tr class="clickable" onclick="showPlayer(${inlineJSON(p.id)},${inlineJSON(p.nickname)})">
           <td><b>${esc(p.nickname) || '(未命名)'}</b>${p.banned ? ' <span class="badge error">封禁</span>' : ''}</td>
           <td><span class="badge">${PROVIDER_LABEL[p.provider] || esc(p.provider)}</span>
               ${p.account_id ? '<span class="badge ok">已绑通行证</span>' : ''}</td>

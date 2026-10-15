@@ -14,7 +14,16 @@ import (
 var (
 	ErrBadCredentials = errors.New("bad credentials")
 	ErrUserExists     = errors.New("user already exists")
+	// ErrLocked reports that the identity hit the failed-attempt lockout.
+	ErrLocked = errors.New("too many failed attempts for this account, try again later")
 )
+
+// AccountIdentity is the lockout key for a platform account. Every path that
+// checks an account password must count against this one key; a path with
+// its own counter (or none) lets an attacker keep guessing through it.
+func AccountIdentity(username string) string {
+	return "account:" + strings.ToLower(strings.TrimSpace(username))
+}
 
 // Credentials carries every field any provider may need; each provider reads its own.
 type Credentials struct {

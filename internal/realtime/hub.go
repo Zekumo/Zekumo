@@ -582,6 +582,22 @@ func (h *Hub) dispatch(c *Client, env Envelope) {
 	}
 }
 
+// Kick closes a player's live connection, e.g. when they are banned.
+func (h *Hub) Kick(gameID, playerID, reason string) {
+	h.mu.Lock()
+	var c *Client
+	if g := h.games[gameID]; g != nil {
+		c = g.clients[playerID]
+	}
+	if c != nil {
+		h.removeClientLocked(c)
+	}
+	h.mu.Unlock()
+	if c != nil {
+		c.close(websocket.ClosePolicyViolation, reason)
+	}
+}
+
 func (h *Hub) disconnect(c *Client) {
 	h.mu.Lock()
 	h.removeClientLocked(c)

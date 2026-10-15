@@ -239,6 +239,7 @@ async function route() {
 
 // pageShell keeps every page's header consistent: title, optional subtitle,
 // and the primary action on the right.
+// subtitle is inserted as HTML, so callers must esc() any dynamic part.
 function pageShell(host, { title, subtitle, actions = '', body }) {
   host.innerHTML = `
     <div class="page-head">

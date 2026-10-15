@@ -5,7 +5,7 @@ async function renderSettings(host) {
   const g = state.game;
   pageShell(host, {
     title: '设置',
-    subtitle: state.game.name,
+    subtitle: esc(state.game.name),
     body: `
       <div class="card">
         <h2>接入凭据</h2>
@@ -54,7 +54,7 @@ async function renderSettings(host) {
         <h2>危险操作</h2>
         <div class="row between">
           <span class="dim">删除游戏会连带删除全部玩家、存档、排行榜、剧情、版本与日志。</span>
-          <button class="btn filled danger" data-write data-min-role="owner" onclick="deleteGame('${g.id}','${esc(g.name)}')">删除游戏</button>
+          <button class="btn filled danger" data-write data-min-role="owner" onclick="deleteGame(${inlineJSON(g.id)},${inlineJSON(g.name)})">删除游戏</button>
         </div>
       </div>`,
   });

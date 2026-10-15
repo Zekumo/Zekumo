@@ -66,7 +66,7 @@ async function renderDashboard(host) {
             <thead><tr><th>游戏</th><th style="width:110px">7 日走势</th>
               <th style="text-align:right">在线</th><th style="text-align:right">活跃</th>
               <th style="text-align:right">新增</th></tr></thead>
-            <tbody>${stats.games.map(g => `<tr class="clickable" onclick="go('overview','${g.id}')">
+            <tbody>${stats.games.map(g => `<tr class="clickable" onclick="go('overview',${inlineJSON(g.id)})">
               <td><b>${esc(g.name)}</b></td>
               <td>${sparkline(g.trend)}</td>
               <td style="text-align:right">${g.online ? `<span class="badge ok">${g.online}</span>` : '0'}</td>

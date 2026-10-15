@@ -147,3 +147,36 @@ func TestRegressionConcurrentIndependentRoomLifecycle(t *testing.T) {
 		t.Fatalf("%d game spaces leaked after concurrent lifecycle", len(h.games))
 	}
 }
+
+// A ban must end the live session: tokens are only checked at connect time.
+func TestRegressionKickRemovesPlayerEverywhere(t *testing.T) {
+	h := NewHub(nil, nil)
+	owner := regressionClient(h, "game", "owner")
+	banned := regressionClient(h, "game", "banned")
+	other := regressionClient(h, "other-game", "banned")
+	regressionDispatch(h, owner, "room.create", map[string]any{"name": "room"})
+	regressionMessage(t, owner, "room.created")
+	regressionDispatch(h, banned, "room.join", map[string]any{"room_id": owner.room.ID})
+	regressionMessage(t, banned, "room.joined")
+	regressionMessage(t, owner, "room.member_joined")
+	regressionDispatch(h, banned, "chat.sub", map[string]any{"channel": "world"})
+	regressionMessage(t, banned, "chat.subbed")
+
+	h.Kick("game", "banned", "banned")
+
+	if h.IsOnline("game", "banned") {
+		t.Fatal("kicked player is still online")
+	}
+	if _, ok := owner.room.members["banned"]; ok {
+		t.Fatal("kicked player is still a room member")
+	}
+	if len(h.games["game"].channels["world"]) != 0 {
+		t.Fatal("kicked player is still subscribed to chat")
+	}
+	if !banned.closed {
+		t.Fatal("kicked connection was not closed")
+	}
+	if !h.IsOnline("other-game", "banned") || other.closed {
+		t.Fatal("kick leaked into another game")
+	}
+}

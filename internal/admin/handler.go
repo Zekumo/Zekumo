@@ -31,6 +31,7 @@ type Handler struct {
 	OAuthClients repo.OAuthClients
 	Hub          *realtime.Hub
 	Tenants      tenant.Store
+	Attempts     auth.AttemptLimiter // optional; shared with the other account login paths
 
 	// DefaultJWTSecret reports that tokens are signed with the shipped
 	// development secret, so the console can say so out loud.
@@ -51,17 +52,31 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
+	// The lockout covers the configured operator too: it is the most valuable
+	// password on the platform and otherwise only per-IP limits guard it.
+	identity := auth.AccountIdentity(req.Username)
+	if h.Attempts != nil && h.Attempts.Locked(r.Context(), identity) {
+		httpx.Error(w, http.StatusTooManyRequests, "locked", auth.ErrLocked.Error())
+		return
+	}
+	badCredentials := func() {
+		if h.Attempts != nil && h.Attempts.Fail(r.Context(), identity) {
+			httpx.Error(w, http.StatusTooManyRequests, "locked", auth.ErrLocked.Error())
+			return
+		}
+		httpx.Error(w, http.StatusUnauthorized, "bad_credentials", "wrong username or password")
+	}
 	userOK := subtle.ConstantTimeCompare([]byte(req.Username), []byte(h.User)) == 1
 	passOK := subtle.ConstantTimeCompare([]byte(req.Password), []byte(h.Pass)) == 1
-	var identity *tenant.Identity
+	var console *tenant.Identity
 	var err error
 	if userOK && passOK {
-		identity, err = h.Tenants.EnsureBootstrap(r.Context(), req.Username)
+		console, err = h.Tenants.EnsureBootstrap(r.Context(), req.Username)
 	} else {
 		account, accountErr := h.Accounts.ByUsername(r.Context(), req.Username)
 		if errors.Is(accountErr, repo.ErrNotFound) {
 			auth.BurnPasswordCheck(req.Password)
-			httpx.Error(w, http.StatusUnauthorized, "bad_credentials", "wrong username or password")
+			badCredentials()
 			return
 		}
 		if accountErr != nil {
@@ -69,20 +84,23 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(req.Password)) != nil {
-			httpx.Error(w, http.StatusUnauthorized, "bad_credentials", "wrong username or password")
+			badCredentials()
 			return
 		}
-		identity, err = h.Tenants.IdentityByAccount(r.Context(), account.ID)
+		console, err = h.Tenants.IdentityByAccount(r.Context(), account.ID)
 		if errors.Is(err, tenant.ErrNotFound) {
 			httpx.Error(w, http.StatusForbidden, "no_membership", "this account has no console membership")
 			return
 		}
 	}
+	if h.Attempts != nil {
+		h.Attempts.Succeed(r.Context(), identity)
+	}
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	workspaces, err := h.Tenants.Workspaces(r.Context(), identity.ID)
+	workspaces, err := h.Tenants.Workspaces(r.Context(), console.ID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
@@ -91,13 +109,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusForbidden, "no_membership", "this account has no console membership")
 		return
 	}
-	token, err := h.Issuer.IssueAdmin(identity.ID, identity.Username)
+	token, err := h.Issuer.IssueAdmin(console.ID, console.Username)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"token": token, "user": identity, "workspaces": workspaces,
+		"token": token, "user": console, "workspaces": workspaces,
 		"default_workspace_id": workspaces[0].ID,
 	})
 }

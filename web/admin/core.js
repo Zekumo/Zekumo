@@ -71,14 +71,16 @@ async function apiRequest(method, path, body, options = {}) {
 }
 
 // ---------- formatting ----------
+// esc output is also placed inside quoted attributes, so quotes must be
+// escaped too; textContent→innerHTML serialization only escapes & < >.
+const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 function esc(s) {
-  const d = document.createElement('div');
-  d.textContent = s == null ? '' : String(s);
-  return d.innerHTML;
+  return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ESC_MAP[c]);
 }
 
-// JSON arguments embedded in an inline handler must be HTML-escaped first;
-// otherwise a quote in an operator-entered title can terminate the attribute.
+// Values passed to an inline handler must go through inlineJSON, never
+// '${esc(x)}': the browser decodes &#39; back to ' before the handler is
+// parsed, so esc alone cannot keep a value inside a JS string literal.
 function inlineJSON(value) { return esc(JSON.stringify(value)); }
 
 function fmtTime(t) { return t ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : '—'; }
@@ -143,7 +145,7 @@ function idCell(value, label) {
   const safe = esc(value);
   return `<span class="mono-chip">
     <code>${safe}</code>
-    <button class="icon-btn tiny" title="复制" onclick="copyText('${safe}', '${esc(label || '')}')">
+    <button class="icon-btn tiny" title="复制" onclick="copyText(${inlineJSON(value)}, ${inlineJSON(label || '')})">
       <svg viewBox="0 0 24 24"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 16H8V7h11v14Z"/></svg>
     </button></span>`;
 }
@@ -160,7 +162,7 @@ function secretCell(value, label) {
     <button class="icon-btn tiny" title="显示" onclick="revealSecret('${id}')">
       <svg viewBox="0 0 24 24"><path d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7Zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>
     </button>
-    <button class="icon-btn tiny" title="复制" onclick="copyText(window['__sec_${id}'], '${esc(label || '')}')">
+    <button class="icon-btn tiny" title="复制" onclick="copyText(window['__sec_${id}'], ${inlineJSON(label || '')})">
       <svg viewBox="0 0 24 24"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 16H8V7h11v14Z"/></svg>
     </button></span>`;
 }

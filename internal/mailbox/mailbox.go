@@ -120,7 +120,7 @@ func (h *Handler) Claim(w http.ResponseWriter, r *http.Request) {
 	granted := make([]map[string]any, 0, len(rewards))
 	for _, rw := range rewards {
 		balance, err := h.Wallets.ApplyTx(ctx, tx, rw.CurrencyID, claims.Subject, rw.Amount,
-			"mail", "mail:"+m.ID, "mail reward: "+m.Title)
+			"mail", repo.MailIdemPrefix+m.ID, "mail reward: "+m.Title)
 		if err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
 			return

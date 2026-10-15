@@ -29,8 +29,21 @@ import (
 // or the last batch of buffered logs is written to a closed pool.
 func New(ctx context.Context, cfg config.Config, st *store.Store, blob storage.Storage) (http.Handler, func(context.Context)) {
 	d := newDeps(ctx, cfg, st, blob)
-	handler := withCORS(withLogging(d.logs, cfg.LogHTTPAll, routes(d)))
+	handler := withSecurityHeaders(withCORS(withLogging(d.logs, cfg.LogHTTPAll, routes(d))))
 	return handler, d.logs.Wait
+}
+
+// withSecurityHeaders forbids framing everywhere. The console, SSO and OAuth
+// pages keep tokens in localStorage, so a framed consent or console page is
+// one disguised click from approving or acting for the user.
+func withSecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Content-Security-Policy", "frame-ancestors 'none'")
+		h.Set("X-Content-Type-Options", "nosniff")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // withCORS lets browser-based mini-games call the API from any origin.

@@ -15,7 +15,7 @@ async function renderContent(host) {
       <div class="master-detail">
         <div class="card list-card">
           ${scripts.map(s => `
-            <button class="list-item ${s.script_key === key ? 'on' : ''}" onclick="openScript('${esc(s.script_key)}')">
+            <button class="list-item ${s.script_key === key ? 'on' : ''}" onclick="openScript(${inlineJSON(s.script_key)})">
               <div class="list-title">${esc(s.script_key)}</div>
               <div class="dim">${esc(s.title) || '无标题'} · v${s.version} · ${fmtAgo(s.updated_at)}</div>
             </button>`).join('')}
@@ -50,8 +50,8 @@ async function openScript(key) {
       <textarea id="scContent" placeholder=" " style="min-height:320px">${esc(JSON.stringify(s.content, null, 2))}</textarea>
       <span class="label">内容 JSON</span></label>
     <div class="row" style="margin-top:16px">
-      <button class="btn filled" data-write onclick="saveScript('${esc(s.script_key)}')">保存</button>
-      <button class="btn text danger" data-write onclick="deleteScript('${esc(s.script_key)}')">删除</button>
+      <button class="btn filled" data-write onclick="saveScript(${inlineJSON(s.script_key)})">保存</button>
+      <button class="btn text danger" data-write onclick="deleteScript(${inlineJSON(s.script_key)})">删除</button>
       <span class="dim">更新于 ${fmtTime(s.updated_at)}</span>
     </div>`;
   applySurfaceAccess(host);

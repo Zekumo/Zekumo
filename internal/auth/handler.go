@@ -34,7 +34,7 @@ type Handler struct {
 // and the authoritative database lookup used at login.
 type BanChecker interface {
 	TokenBanned(ctx context.Context, playerID string) bool
-	ActiveBan(ctx context.Context, playerID string) *repo.PlayerBan
+	ActiveBan(ctx context.Context, playerID string) (*repo.PlayerBan, error)
 }
 
 // AttemptLimiter throttles repeated failures against one identity. Per-IP
@@ -97,6 +97,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	player, err := provider.Authenticate(r.Context(), game.ID, req.Credentials)
+	if errors.Is(err, ErrLocked) {
+		httpx.Error(w, http.StatusTooManyRequests, "locked", err.Error())
+		return
+	}
 	if errors.Is(err, ErrBadCredentials) {
 		if identity != "" && h.Attempts.Fail(r.Context(), identity) {
 			httpx.Error(w, http.StatusTooManyRequests, "locked",
@@ -161,7 +165,12 @@ func (h *Handler) gameFor(w http.ResponseWriter, r *http.Request, appID string) 
 
 func (h *Handler) finishLogin(w http.ResponseWriter, r *http.Request, player *repo.Player) {
 	if h.Bans != nil {
-		if ban := h.Bans.ActiveBan(r.Context(), player.ID); ban != nil {
+		ban, err := h.Bans.ActiveBan(r.Context(), player.ID)
+		if err != nil { // fail closed: an unknown ban state must not log in or clear the flag
+			httpx.Error(w, http.StatusInternalServerError, "internal", err.Error())
+			return
+		}
+		if ban != nil {
 			httpx.JSON(w, http.StatusForbidden, map[string]any{
 				"error": map[string]string{
 					"code":    "player_banned",

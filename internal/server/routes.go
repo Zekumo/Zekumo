@@ -112,7 +112,6 @@ func registerPlayer(rt router) {
 	p("GET /v1/player/data/{key}", d.playerH.GetData)
 	p("PUT /v1/player/data/{key}", d.playerH.PutData)
 	p("DELETE /v1/player/data/{key}", d.playerH.DeleteData)
-	p("POST /v1/player/bind", d.ssoH.BindPlayer)
 	p("POST /v1/leaderboards/{board}/score", d.lbH.SubmitScore)
 	p("GET /v1/leaderboards/{board}", d.lbH.Top)
 	p("GET /v1/leaderboards/{board}/me", d.lbH.Me)
@@ -146,6 +145,8 @@ func registerPlayer(rt router) {
 	rt.anon("PUT /v1/kv/{namespace}/{key}", anonRule, d.kvH.Put)
 	rt.anon("DELETE /v1/kv/{namespace}/{key}", anonRule, d.kvH.Delete)
 
+	// Bind checks an account password, so it is throttled like a login.
+	rt.player("POST /v1/player/bind", authRule, d.ssoH.BindPlayer)
 	rt.player("POST /v1/logs", clientLogRule, d.logsH.ClientReport)
 	rt.player("GET /v1/functions/{name}", fnRule, d.fnH.Call)
 	rt.player("POST /v1/functions/{name}", fnRule, d.fnH.Call)

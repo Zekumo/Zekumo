@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -159,6 +160,16 @@ func (s *Service) build(ctx context.Context, job *repo.ExportJob) ([]byte, strin
 	return body, "zip", err
 }
 
+// csvText neutralizes player-chosen text that a spreadsheet would otherwise
+// evaluate as a formula (a nickname like =HYPERLINK(...)) when the operator
+// opens the export.
+func csvText(s string) string {
+	if s != "" && strings.ContainsRune("=+-@\t\r", rune(s[0])) {
+		return "'" + s
+	}
+	return s
+}
+
 func buildZip(players []*playerExport) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -180,18 +191,18 @@ func buildZip(players []*playerExport) ([]byte, error) {
 
 	pRows, dRows, bRows, lRows, aRows := [][]string{}, [][]string{}, [][]string{}, [][]string{}, [][]string{}
 	for _, p := range players {
-		pRows = append(pRows, []string{p.ID, p.Provider, p.Identifier, p.Nickname,
+		pRows = append(pRows, []string{p.ID, p.Provider, csvText(p.Identifier), csvText(p.Nickname),
 			string(p.Profile), strconv.FormatBool(p.Banned),
 			p.CreatedAt.Format(time.RFC3339), p.LastLoginAt.Format(time.RFC3339)})
 		for _, d := range p.Data {
-			dRows = append(dRows, []string{p.ID, d.Key, string(d.Value), d.UpdatedAt.Format(time.RFC3339)})
+			dRows = append(dRows, []string{p.ID, csvText(d.Key), string(d.Value), d.UpdatedAt.Format(time.RFC3339)})
 		}
 		for _, b := range p.Balances {
 			bRows = append(bRows, []string{p.ID, b.Currency, strconv.FormatInt(b.Balance, 10)})
 		}
 		for _, l := range p.Ledger {
 			lRows = append(lRows, []string{p.ID, l.Currency, strconv.FormatInt(l.Amount, 10),
-				strconv.FormatInt(l.BalanceAfter, 10), l.Kind, l.IdempotencyKey, l.Note,
+				strconv.FormatInt(l.BalanceAfter, 10), l.Kind, csvText(l.IdempotencyKey), csvText(l.Note),
 				l.CreatedAt.Format(time.RFC3339)})
 		}
 		for _, a := range p.Achievements {
