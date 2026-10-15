@@ -22,6 +22,27 @@ html {
 body {
   margin:0;
 }
+html[lang="en"] {
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+html[lang="en"] .hero h1 {
+  letter-spacing:-1.5px;
+  font-size:clamp(42px,4.2vw,62px);
+}
+.language-switch {
+  white-space:nowrap;
+  font-weight:650;
+}
+@media(min-width:761px) {
+  html[lang="en"] .header { gap:20px; }
+  html[lang="en"] .header nav { gap:22px; }
+}
+@media(max-width:760px) {
+  html[lang="en"] .hero h1 { font-size:43px; }
+  html[lang="en"] .hero-detail { max-width:280px; }
+  html[lang="en"] .hero-description { letter-spacing:0; }
+  html[lang="en"] .platform-strip>div { flex-wrap:wrap; }
+}
 a {
   color:inherit;
   text-decoration:none;

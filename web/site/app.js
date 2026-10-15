@@ -1,16 +1,18 @@
 (() => {
   'use strict';
+  const english = document.documentElement.lang === 'en';
+  const message = (en, zh) => english ? en : zh;
   const menu = document.querySelector('.menu-toggle');
   const navigation = document.querySelector('#navigation');
   const closeMenu = () => {
     menu.setAttribute('aria-expanded', 'false');
-    menu.setAttribute('aria-label', '打开导航');
+    menu.setAttribute('aria-label', message('Open navigation', '打开导航'));
     navigation.classList.remove('open');
   };
   menu.addEventListener('click', () => {
     const open = menu.getAttribute('aria-expanded') !== 'true';
     menu.setAttribute('aria-expanded', String(open));
-    menu.setAttribute('aria-label', open ? '关闭导航' : '打开导航');
+    menu.setAttribute('aria-label', open ? message('Close navigation', '关闭导航') : message('Open navigation', '打开导航'));
     navigation.classList.toggle('open', open);
   });
   navigation.addEventListener('click', (event) => {
@@ -66,14 +68,14 @@
     const code = panel.querySelector('code').textContent;
     try {
       await navigator.clipboard.writeText(code);
-      notify('代码已复制，开始你的创作吧 ✧');
+      notify(message('Code copied. Let’s start creating ✧', '代码已复制，开始你的创作吧 ✧'));
     } catch {
       const selection = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents(panel.querySelector('code'));
       selection.removeAllRanges();
       selection.addRange(range);
-      notify('代码已选中，请按 Ctrl+C 或 ⌘C 复制');
+      notify(message('Code selected. Press Ctrl+C or ⌘C to copy.', '代码已选中，请按 Ctrl+C 或 ⌘C 复制'));
     }
   });
 })();

@@ -17,7 +17,8 @@ func TestHostedPages(t *testing.T) {
 		contentType string
 		contains    string
 	}{
-		{"/", 200, "text/html", "让每一个"},
+		{"/", 200, "text/html", "Little worlds."},
+		{"/site/zh.html", 200, "text/html", "让每一个"},
 		{"/site/style.css", 200, "text/css", ".hero"},
 		{"/site/app.js", 200, "javascript", "activateTab"},
 		{"/site/assets/cloud-adventure.png", 200, "image/png", ""},
