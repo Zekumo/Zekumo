@@ -73,6 +73,17 @@ final class ZekumoKitTests: XCTestCase {
         """)
     }
 
+    func testLargeIntegersSurviveSaveInspection() throws {
+        let v = try JSONDecoder().decode(JSONValue.self, from: Data("[9007199254740993, 2.5e20]".utf8))
+        XCTAssertEqual(v.prettyPrinted.filter { !$0.isWhitespace }, "[9007199254740993,2.5e+20]")
+    }
+
+    func testStatsAcceptNullGames() throws {
+        let body = #"{"totals":{"games":0,"players":0,"accounts":0,"online":0},"today":{"date":"2026-11-22","active":0,"logins":0,"new_players":0},"days":[],"games":null,"retention":{"d1_cohort":0,"d1_back":0,"d7_cohort":0,"d7_back":0},"timezone":"UTC"}"#
+        let s = try ZekumoClient.decode(PlatformStats.self, status: 200, data: Data(body.utf8))
+        XCTAssertTrue(s.games.isEmpty)
+    }
+
     func testErrorsMapToMessages() {
         let body = Data(#"{"error":{"code":"already_banned","message":"player already has an active ban"}}"#.utf8)
         XCTAssertThrowsError(try ZekumoClient.decode(PlayerBan.self, status: 409, data: body)) { error in
