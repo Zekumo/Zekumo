@@ -32,6 +32,28 @@ final class LiveServerTests: XCTestCase {
         let bans = try await client.bans(gameID: game.id)
         XCTAssertEqual(bans, [])
 
+        // Players: a guest logs in and saves through the game API, then the console reads, bans and unbans it.
+        struct GuestLogin: Decodable { struct P: Decodable { var id: String }; var token: String; var player: P }
+        let guest: GuestLogin = try await gameAPI(url, "POST", "/v1/auth/login", body: [
+            "app_id": game.appId, "provider": "guest", "device_id": "macos-live-\(UUID().uuidString)", "nickname": "测试猫"])
+        let _: JSONValue = try await gameAPI(url, "PUT", "/v1/player/data/save", token: guest.token,
+                                             body: ["gold": 9007199254740993, "items": ["木剑"]])
+        let listedPlayers = try await client.players(gameID: game.id)
+        XCTAssertEqual(listedPlayers.map(\.id), [guest.player.id])
+        let save = try await client.playerData(playerID: guest.player.id)
+        XCTAssertEqual(save.first?.key, "save")
+        XCTAssertEqual(save.first?.value, .object(["gold": .integer(9007199254740993), "items": .array([.string("木剑")])]))
+        try await client.ban(playerID: guest.player.id, reason: "测试封禁", durationSecs: 3600)
+        let banned = try await client.bans(gameID: game.id)
+        XCTAssertEqual(banned.first?.reason, "测试封禁")
+        XCTAssertEqual(banned.first?.isActive, true)
+        let bannedPlayers = try await client.players(gameID: game.id)
+        XCTAssertEqual(bannedPlayers.first?.banned, true)
+        try await client.unban(playerID: guest.player.id)
+        let lifted = try await client.bans(gameID: game.id)
+        XCTAssertEqual(lifted.first?.isActive, false)
+        XCTAssertNotNil(lifted.first?.liftedAt)
+
         // Release lifecycle: draft → artifact → publish → rollout → revoke; only drafts can be deleted.
         let version = "1.0.\(Int.random(in: 0...9999))"
         let release = try await client.createRelease(gameID: game.id, NewRelease(
@@ -75,5 +97,17 @@ final class LiveServerTests: XCTestCase {
         try await client.deactivateAnnouncement(id: notice.id)
         notices = try await client.announcements(gameID: game.id)
         XCTAssertEqual(notices.first?.active, false)
+    }
+
+    /// Calls the player-facing /v1 API, which the console client deliberately doesn't wrap.
+    private func gameAPI<T: Decodable>(_ base: URL, _ method: String, _ path: String, token: String? = nil,
+                                       body: [String: Any]) async throws -> T {
+        var req = URLRequest(url: base.appendingPathComponent(path))
+        req.httpMethod = method
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        return try ZekumoClient.decode(T.self, status: (resp as? HTTPURLResponse)?.statusCode ?? 0, data: data)
     }
 }
