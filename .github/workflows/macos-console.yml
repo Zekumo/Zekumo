@@ -1,0 +1,27 @@
+name: macos-console
+
+on:
+  pull_request:
+    paths:
+      - "macos/**"
+      - ".github/workflows/macos-console.yml"
+  push:
+    branches: [main]
+    paths:
+      - "macos/**"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: macos
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: swift test
+      - name: Build app bundle
+        run: ./scripts/build-app.sh
