@@ -291,6 +291,19 @@ public struct PlatformStats: Codable, Sendable {
     public var games: [GameStat]
     public var retention: Retention
     public var timezone: String
+
+    enum CodingKeys: String, CodingKey { case totals, today, days, games, retention, timezone }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        totals = try c.decode(Totals.self, forKey: .totals)
+        today = try c.decode(DayRow.self, forKey: .today)
+        days = try c.decodeIfPresent([DayRow].self, forKey: .days) ?? []
+        // The server leaves `games` null for workspaces without games.
+        games = try c.decodeIfPresent([GameStat].self, forKey: .games) ?? []
+        retention = try c.decode(Retention.self, forKey: .retention)
+        timezone = try c.decode(String.self, forKey: .timezone)
+    }
 }
 
 public struct Dependency: Codable, Hashable, Sendable {
