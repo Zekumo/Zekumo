@@ -203,8 +203,15 @@ public final class ZekumoClient: @unchecked Sendable {
 
     public func bans(gameID: String) async throws -> [PlayerBan] {
         struct R: Decodable { var bans: [PlayerBan]? }
-        let r: R = try await send("GET", game(gameID) + "/bans")
-        return r.bans ?? []
+        let pageSize = 200
+        var all: [PlayerBan] = []
+        while true {
+            let r: R = try await send("GET", game(gameID) + "/bans",
+                                      query: ["limit": "\(pageSize)", "offset": "\(all.count)"])
+            let page = r.bans ?? []
+            all += page
+            if page.count < pageSize { return all }
+        }
     }
 
     // MARK: - Releases
