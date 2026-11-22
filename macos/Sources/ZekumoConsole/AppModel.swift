@@ -106,8 +106,10 @@ final class AppModel {
             let me = try await client.me()
             adopt(client: client, me: me, workspaces: me.workspaces,
                   preferred: defaults.string(forKey: "workspaceID") ?? me.workspaces.first?.id)
-        } catch {
+        } catch ZekumoError.unauthorized {
             Keychain.deleteToken(for: url.absoluteString)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
